@@ -2,6 +2,9 @@ import streamlit as st
 import pandas as pd
 import re
 
+# =========================
+# CONFIG
+# =========================
 st.set_page_config(layout="wide")
 
 # =========================
@@ -9,13 +12,13 @@ st.set_page_config(layout="wide")
 # =========================
 @st.cache_data
 def load_data():
-    df = pd.read_csv("waypoints.csv")
-    df.columns = ["AWID","WAYPOINT","COUNTRY","COORDS"]
-    df["AWID"] = df["AWID"].str.strip().str.upper()
+    df = pd.read_csv("waypoints.csv", engine="python")
+    df.columns = ["AWID", "WAYPOINT", "COUNTRY", "COORDS"]
+    df["AWID"] = df["AWID"].astype(str).str.upper().str.strip()
     return df
 
 df = load_data()
-valid_airways = set(df["AWID"])
+valid_airways = set(df["AWID"].unique())
 
 # =========================
 # COORD PARSER
@@ -35,71 +38,76 @@ def parse_coord(coord):
         return None, None
 
 # =========================
-# SIMPLE VISUAL
+# VISUAL BLOCK (UNCHANGED)
 # =========================
-def get_direction_visual(coords):
+def get_visual_block(coords_list):
+    coords = [(w, lat, lon) for (w, c, lat, lon) in coords_list if lat is not None]
 
-    pts = [(w,lat,lon) for (w,c,lat,lon) in coords if lat is not None]
-
-    if len(pts) < 2:
+    if len(coords) < 2:
         return ""
 
-    s = pts[0]
-    e = pts[-1]
+    north = max(coords, key=lambda x: x[1])
+    south = min(coords, key=lambda x: x[1])
+    east = max(coords, key=lambda x: x[2])
+    west = min(coords, key=lambda x: x[2])
 
-    dlat = e[1] - s[1]
-    dlon = e[2] - s[2]
+    dlat = north[1] - south[1]
+    dlon = east[2] - west[2]
 
-    if abs(dlat) > abs(dlon) * 1.5:
-        top = s if s[1] > e[1] else e
-        bottom = e if s[1] > e[1] else s
-        return f"{top[0]}<br>│<br>│<br>{bottom[0]}"
-
-    elif abs(dlon) > abs(dlat) * 1.5:
-        left = s if s[2] < e[2] else e
-        right = e if s[2] < e[2] else s
-        return f"{left[0]} ───── {right[0]}"
-
+    if abs(dlat) >= abs(dlon):
+        return f"""
+        <div style="text-align:center">
+            {north[0]}<br>
+            │<br>│<br>
+            {south[0]}
+        </div>
+        """
     else:
-        return f"{s[0]} → {e[0]}"
+        return f"""
+        <div style="text-align:center">
+            {west[0]} ───── {east[0]}
+        </div>
+        """
 
 # =========================
-# NOTAM PARSER
+# EXTRACT AIRWAYS
 # =========================
-def normalize(t):
-    return re.sub(r"[^A-Z0-9/ ]"," ",t.upper())
+def normalize(text):
+    text = text.upper()
+    text = re.sub(r"[^A-Z0-9/ ]", " ", text)
+    return text
 
-def extract_airways(t):
-    tokens = re.split(r"[ /]+", normalize(t))
+def extract_airways(text):
+    tokens = re.split(r"[ /]+", normalize(text))
     return sorted(set(tokens) & valid_airways)
 
 # =========================
-# ✅ NEW LOGIC: SEGMENT EXTRACTION
+# ✅ NEW: SEGMENT EXTRACTION (FIXED)
 # =========================
 def extract_segments(notam_text, airways):
 
-    text = normalize(notam_text)
-    lines = text.split("\n")
-
+    lines = notam_text.upper().split("\n")
     results = []
 
     for airway in airways:
         found = False
 
         for line in lines:
-            if airway in line:
 
-                # match: BTN X AND Y
-                match = re.search(r"BTN ([A-Z0-9]+) AND ([A-Z0-9]+)", line)
+            clean_line = re.sub(r"[^A-Z0-9/ ]", " ", line.upper())
+
+            if airway in clean_line:
+
+                # ✅ BTN extraction FIXED
+                match = re.search(r"BTN\s+([A-Z0-9]+)\s+AND\s+([A-Z0-9]+)", clean_line)
 
                 if match:
                     wp1 = match.group(1)
                     wp2 = match.group(2)
 
-                    # validate using dataset
-                    airway_data = df[df["AWID"] == airway]["WAYPOINT"].tolist()
+                    airway_points = df[df["AWID"] == airway]["WAYPOINT"].tolist()
 
-                    if wp1 in airway_data and wp2 in airway_data:
+                    if wp1 in airway_points and wp2 in airway_points:
                         results.append(f"{airway} {wp1}-{wp2}")
                         found = True
                         break
@@ -119,9 +127,9 @@ if "segments" not in st.session_state:
     st.session_state.segments = []
 
 # =========================
-# LAYOUT
+# LAYOUT (UNCHANGED)
 # =========================
-left, middle, right = st.columns([1,1,2])
+left, right = st.columns([1,3])
 
 # =========================
 # LEFT PANEL
@@ -129,41 +137,47 @@ left, middle, right = st.columns([1,1,2])
 with left:
     st.markdown("## 📋 NOTAM INPUT")
 
-    txt = st.text_area("NOTAM", height=200, label_visibility="collapsed")
+    notam_input = st.text_area(
+        "NOTAM",
+        height=200,
+        placeholder="Paste NOTAM here...",
+        label_visibility="collapsed"
+    )
 
     c1, c2 = st.columns(2)
 
-    if c1.button("Parse"):
-        airways = extract_airways(txt)
+    if c1.button("🚀 Parse"):
+        airways = extract_airways(notam_input)
         st.session_state.airways = airways
-        st.session_state.segments = extract_segments(txt, airways)
+        st.session_state.segments = extract_segments(notam_input, airways)
 
     if c2.button("Clear"):
         st.session_state.airways = []
         st.session_state.segments = []
 
-    st.markdown("### ✅ Airways")
+    # ✅ SPLIT LEFT LOWER AREA
+    col_airway, col_output = st.columns(2)
 
-    for a in st.session_state.airways:
-        st.text(f"• {a}")
+    # ---- Airways ----
+    with col_airway:
+        st.markdown("### ✅ Airways")
+
+        for a in st.session_state.airways:
+            st.text(f"• {a}")
+
+    # ---- Restriction Output ----
+    with col_output:
+        st.markdown("### 📌 Output")
+
+        if st.session_state.segments:
+            st.text_area(
+                "Copy",
+                value="\n".join(st.session_state.segments),
+                height=250
+            )
 
 # =========================
-# ✅ NEW PANEL (SEGMENTS)
-# =========================
-with middle:
-    st.markdown("## 📌 Restriction Output")
-
-    if st.session_state.segments:
-        output_text = "\n".join(st.session_state.segments)
-
-        st.text_area(
-            "Copy Output",
-            value=output_text,
-            height=250
-        )
-
-# =========================
-# RIGHT PANEL
+# RIGHT PANEL (UNCHANGED)
 # =========================
 with right:
 
@@ -178,16 +192,18 @@ with right:
             with col:
                 group = df[df["AWID"] == airway]
 
-                st.markdown(f"### {airway}")
+                html = f'<div style="padding:10px;border:1px solid #333;border-radius:6px;">'
+                html += f'<div style="color:#4CAF50;font-weight:bold;">{airway}</div>'
 
-                coords = []
+                coords_list = []
 
                 for _, r in group.iterrows():
                     lat, lon = parse_coord(r["COORDS"])
-                    coords.append((r["WAYPOINT"], r["COUNTRY"], lat, lon))
+                    coords_list.append((r["WAYPOINT"], r["COUNTRY"], lat, lon))
+                    html += f"{r['WAYPOINT']} ({r['COUNTRY']})<br>"
 
-                    st.write(f"{r['WAYPOINT']} ({r['COUNTRY']})")
+                html += "<hr>"
+                html += get_visual_block(coords_list)
+                html += "</div>"
 
-                st.markdown("---")
-
-                st.markdown(get_direction_visual(coords), unsafe_allow_html=True)
+                st.markdown(html, unsafe_allow_html=True)
