@@ -38,17 +38,16 @@ def parse_coord(coord):
         return None, None
 
 # =========================
-# MINI LINE GENERATOR
+# VISUAL BLOCK (FIXED)
 # =========================
 def get_visual_block(coords_list):
 
-    # remove invalid
     coords = [(w, lat, lon) for (w, c, lat, lon) in coords_list if lat is not None]
 
     if len(coords) < 2:
         return ""
 
-    # find extremes
+    # extremes
     north = max(coords, key=lambda x: x[1])
     south = min(coords, key=lambda x: x[1])
     east = max(coords, key=lambda x: x[2])
@@ -57,36 +56,25 @@ def get_visual_block(coords_list):
     dlat = north[1] - south[1]
     dlon = east[2] - west[2]
 
-    # vertical vs horizontal decision
+    # VERTICAL
     if abs(dlat) >= abs(dlon):
-        # vertical
-        top = north
-        bottom = south
-
-        html = f"""
+        return f"""
         <div class="viz">
-            <div>{top[0]}</div>
+            <div class="label">{north[0]}</div>
             <div class="line-vertical"></div>
-            <div>{bottom[0]}</div>
+            <div class="label">{south[0]}</div>
         </div>
         """
 
+    # HORIZONTAL ✅ FIXED SPACING
     else:
-        # horizontal
-        left = west
-        right = east
-
-        html = f"""
-        <div class="viz">
-            <div style="display:flex;justify-content:space-between">
-                <span>{left[0]}</span>
-                <span>{right[0]}</span>
-            </div>
+        return f"""
+        <div class="viz-horizontal">
+            <div class="h-label left">{west[0]}</div>
+            <div class="h-label right">{east[0]}</div>
             <div class="line-horizontal"></div>
         </div>
         """
-
-    return html
 
 # =========================
 # EXTRACT AIRWAYS
@@ -102,13 +90,13 @@ def extract_airways(text):
     return sorted(set(tokens) & valid_airways)
 
 # =========================
-# CSS (FINAL CLEAN UI)
+# CSS (FINAL POLISHED)
 # =========================
 st.markdown("""
 <style>
 
 .block-container {
-    padding-top: 1.5rem !important;
+    padding-top: 1.8rem !important;
 }
 
 /* TILE */
@@ -122,13 +110,13 @@ st.markdown("""
     gap: 10px;
 }
 
-/* LEFT TEXT */
+/* TEXT BLOCK */
 .text-block {
     width: 60%;
     overflow-y: auto;
 }
 
-/* RIGHT VISUAL */
+/* VISUAL BLOCK */
 .viz-container {
     width: 40%;
     display: flex;
@@ -136,13 +124,40 @@ st.markdown("""
     justify-content: center;
 }
 
-/* VISUAL BLOCK */
+/* VISUAL */
 .viz {
     text-align: center;
     font-size: 12px;
 }
 
-/* LINES */
+/* HORIZONTAL FIXED */
+.viz-horizontal {
+    width: 100%;
+    text-align: center;
+    position: relative;
+}
+
+.h-label {
+    position: absolute;
+    top: -5px;
+    font-size: 11px;
+}
+
+.h-label.left {
+    left: 0;
+}
+
+.h-label.right {
+    right: 0;
+}
+
+.line-horizontal {
+    height: 3px;
+    width: 70%;
+    background: #ff4d4d;
+    margin: 15px auto 0 auto;
+}
+
 .line-vertical {
     width: 3px;
     height: 80px;
@@ -150,27 +165,33 @@ st.markdown("""
     margin: auto;
 }
 
-.line-horizontal {
-    height: 3px;
-    width: 100%;
-    background: #ff4d4d;
-    margin-top: 6px;
+.label {
+    margin: 4px 0;
 }
 
+/* TITLE */
 .tile-title {
     color: #4CAF50;
     font-weight: bold;
     margin-bottom: 8px;
 }
 
-/* LEFT PANEL LIST */
+/* ✅ FIX 1: compact airway list */
 .airway-list {
-    max-height: 170px;
+    max-height: 180px;
     overflow-y: auto;
+    line-height: 1.2;   /* reduces spacing */
+    font-size: 13px;
+}
+
+/* remove extra margins */
+.airway-list div {
+    margin: 0;
+    padding: 0;
 }
 
 h2 {
-    margin-top: 10px !important;
+    margin-top: 12px !important;
 }
 
 </style>
@@ -212,8 +233,9 @@ with left:
 
     st.markdown('<div class="airway-list">', unsafe_allow_html=True)
 
+    # ✅ FIXED: compact rendering (no st.write)
     for a in st.session_state.airways:
-        st.write(f"• {a}")
+        st.markdown(f"<div>• {a}</div>", unsafe_allow_html=True)
 
     st.markdown('</div>', unsafe_allow_html=True)
 
@@ -221,6 +243,7 @@ with left:
 # RIGHT PANEL
 # =========================
 with right:
+
     st.markdown("## ✈️ Airway Details")
 
     for i in range(0, len(st.session_state.airways), 3):
@@ -234,7 +257,7 @@ with right:
 
                 html = f'<div class="tile">'
 
-                # LEFT SIDE TEXT (UNCHANGED ORDER)
+                # LEFT
                 html += '<div class="text-block">'
                 html += f'<div class="tile-title">{airway}</div>'
 
@@ -249,7 +272,7 @@ with right:
 
                 html += '</div>'
 
-                # RIGHT SIDE VISUAL
+                # RIGHT VISUAL
                 html += '<div class="viz-container">'
                 html += get_visual_block(coords_list)
                 html += '</div>'
