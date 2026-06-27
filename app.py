@@ -21,7 +21,7 @@ df = load_data()
 valid_airways = set(df["AWID"].unique())
 
 # =========================
-# ✅ ✅ RESTORED CSS (CRITICAL FIX)
+# CSS (DO NOT CHANGE)
 # =========================
 st.markdown("""
 <style>
@@ -138,16 +138,23 @@ def get_visual_block(coords_list):
         """
 
 # =========================
-# PARSERS
+# NORMALIZE
 # =========================
 def normalize(text):
     return re.sub(r"[^A-Z0-9/ ]", " ", text.upper())
 
+# =========================
+# EXTRACT AIRWAYS
+# =========================
 def extract_airways(text):
     tokens = re.split(r"[ /]+", normalize(text))
     return sorted(set(tokens) & valid_airways)
 
+# =========================
+# ✅ UPDATED SEGMENT LOGIC
+# =========================
 def extract_segments(notam_text, airways):
+
     results = []
     lines = notam_text.split("\n")
 
@@ -158,14 +165,30 @@ def extract_segments(notam_text, airways):
             clean = normalize(line)
 
             if airway in clean:
-                match = re.search(r"BTN\s+([A-Z0-9]+)\s+AND\s+([A-Z0-9]+)", clean)
 
-                if match:
-                    wp1, wp2 = match.group(1), match.group(2)
+                # ✅ CASE 1: BTN A AND B
+                match_btn = re.search(r"BTN\s+([A-Z0-9]+)\s+AND\s+([A-Z0-9]+)", clean)
+
+                if match_btn:
+                    wp1, wp2 = match_btn.group(1), match_btn.group(2)
+
                     airway_points = df[df["AWID"] == airway]["WAYPOINT"].tolist()
 
                     if wp1 in airway_points and wp2 in airway_points:
                         results.append(f"{airway} {wp1}-{wp2}")
+                        found = True
+                        break
+
+                # ✅ CASE 2: DIRECTIONAL (N/S/E/W OF)
+                match_dir = re.search(r"(N|S|E|W)\s+OF\s+([A-Z0-9]+)", clean)
+
+                if match_dir:
+                    wp = match_dir.group(2)
+
+                    airway_points = df[df["AWID"] == airway]["WAYPOINT"].tolist()
+
+                    if wp in airway_points:
+                        results.append(f"{airway} {wp}-ENTER MANUALLY")
                         found = True
                         break
 
@@ -184,7 +207,7 @@ if "segments" not in st.session_state:
     st.session_state.segments = []
 
 # =========================
-# LAYOUT
+# MAIN LAYOUT
 # =========================
 left, right = st.columns([1,3])
 
@@ -226,13 +249,16 @@ with right:
     st.markdown("## ✈️ Airway Details")
 
     for i in range(0, len(st.session_state.airways), 3):
+
         cols = st.columns(3)
 
         for col, airway in zip(cols, st.session_state.airways[i:i+3]):
+
             with col:
                 group = df[df["AWID"] == airway]
 
                 html = f'<div class="tile">'
+
                 html += '<div class="text-block">'
                 html += f'<div class="tile-title">{airway}</div>'
 
