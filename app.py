@@ -5,7 +5,7 @@ import math
 
 st.set_page_config(layout="wide")
 
-# ================== LOAD ==================
+# ================= LOAD =================
 @st.cache_data
 def load_data():
     df = pd.read_csv("waypoints.csv")
@@ -16,7 +16,7 @@ def load_data():
 df = load_data()
 valid_airways = set(df["AWID"])
 
-# ================== PARSE ==================
+# ================= COORD =================
 def parse_coord(coord):
     try:
         lat = float(coord[0:2]) + float(coord[2:4])/60 + float(coord[4:6])/3600
@@ -29,85 +29,90 @@ def parse_coord(coord):
     except:
         return None, None
 
-# ================== VISUAL FIXED ==================
-def get_visual_block(coords_list):
-
-    pts = [(w,lat,lon) for (w,c,lat,lon) in coords_list if lat is not None]
-
-    if len(pts) < 2:
-        return ""
-
-    # ✅ TRUE ROUTE FLOW (FIX)
-    start = pts[0]
-    end = pts[-1]
+# ================= ✅ FINAL VISUAL =================
+def build_svg(start, end):
 
     lat1, lon1 = start[1], start[2]
     lat2, lon2 = end[1], end[2]
 
-    dlat = lat2 - lat1
-    dlon = lon2 - lon1
+    dx = lon2 - lon1
+    dy = lat2 - lat1
 
-    angle = abs(math.degrees(math.atan2(dlat, dlon)))
+    # normalize placement
+    x1 = 20 if dx > 0 else 80
+    x2 = 80 if dx > 0 else 20
 
-    # ✅ VERTICAL
-    if angle > 60:
+    y1 = 20 if dy < 0 else 80
+    y2 = 80 if dy < 0 else 20
+
+    # labels
+    return f"""
+    <div class="viz">
+        <div class="pt" style="left:{x1}%; top:{y1}%;">{start[0]}</div>
+        <div class="pt" style="left:{x2}%; top:{y2}%;">{end[0]}</div>
+
+        <svg width="100%" height="100%">
+            <line x1="{x1}%" y1="{y1}%"
+                  x2="{x2}%" y2="{y2}%"
+                  stroke="#ff4d4d" stroke-width="3"/>
+        </svg>
+    </div>
+    """
+
+def get_visual(coords):
+
+    pts = [(w,lat,lon) for (w,c,lat,lon) in coords if lat is not None]
+
+    if len(pts) < 2:
+        return ""
+
+    start = pts[0]
+    end   = pts[-1]
+
+    lat1, lon1 = start[1], start[2]
+    lat2, lon2 = end[1], end[2]
+
+    dx = abs(lon2 - lon1)
+    dy = abs(lat2 - lat1)
+
+    # vertical
+    if dy > dx * 1.5:
         top = start if lat1 > lat2 else end
         bottom = end if lat1 > lat2 else start
 
         return f"""
-        <div class="viz">
+        <div class="viz v">
             <div>{top[0]}</div>
-            <div class="line-v"></div>
+            <div class="linev"></div>
             <div>{bottom[0]}</div>
         </div>
         """
 
-    # ✅ HORIZONTAL
-    elif angle < 30:
+    # horizontal
+    elif dx > dy * 1.5:
         left = start if lon1 < lon2 else end
         right = end if lon1 < lon2 else start
 
         return f"""
-        <div class="viz-h">
-            <div class="l">{left[0]}</div>
-            <div class="r">{right[0]}</div>
-            <div class="line-h"></div>
+        <div class="viz h">
+            <div class="left">{left[0]}</div>
+            <div class="right">{right[0]}</div>
+            <div class="lineh"></div>
         </div>
         """
 
-    # ✅ DIAGONAL (FINAL FIX)
+    # diagonal ✅ FIXED
     else:
+        return build_svg(start, end)
 
-        x1 = 15 if lon1 < lon2 else 85
-        x2 = 85 if lon1 < lon2 else 15
+# ================= NOTAM =================
+def normalize(t):
+    return re.sub(r"[^A-Z0-9/ ]"," ",t.upper())
 
-        y1 = 15 if lat1 > lat2 else 85
-        y2 = 85 if lat1 > lat2 else 15
+def extract_airways(t):
+    return sorted(set(re.split(r"[ /]+",normalize(t))) & valid_airways)
 
-        return f"""
-        <div class="viz-svg">
-            <div style="left:{x1}%; top:{y1}%;">{start[0]}</div>
-            <div style="left:{x2}%; top:{y2}%;">{end[0]}</div>
-
-            <svg width="100%" height="100%">
-                <line x1="{x1}%" y1="{y1}%"
-                      x2="{x2}%" y2="{y2}%"
-                      stroke="red" stroke-width="3"/>
-            </svg>
-        </div>
-        """
-
-# ================== NOTAM ==================
-def normalize(text):
-    text=text.upper()
-    text=re.sub(r"[^A-Z0-9/ ]"," ",text)
-    return text
-
-def extract_airways(text):
-    tokens=re.split(r"[ /]+",normalize(text))
-    return sorted(set(tokens)&valid_airways)
-
-# ================== CSS ==================
+# ================= CSS =================
 st.markdown("""
 <style>
 
@@ -116,49 +121,46 @@ st.markdown("""
 .tile{
 background:#0e1117;border:1px solid #333;
 border-radius:8px;padding:10px;
-height:320px;display:flex;gap:10px;
+display:flex;gap:10px;height:320px;
 }
 
 .text{width:60%;overflow-y:auto;}
 .vizbox{width:40%;display:flex;align-items:center;justify-content:center;}
 
-.line-v{width:3px;height:90px;background:red;margin:auto;}
-.line-h{height:3px;width:80%;background:red;margin:20px auto;}
+.v{ text-align:center;}
+.linev{width:3px;height:90px;background:#ff4d4d;margin:auto;}
 
-.viz{text-align:center;}
-.viz-h{position:relative;}
+.h{ position:relative;}
+.lineh{height:3px;width:80%;background:#ff4d4d;margin:20px auto;}
+.left{position:absolute;left:0;}
+.right{position:absolute;right:0;}
 
-.l{position:absolute;left:0;}
-.r{position:absolute;right:0;}
-
-.viz-svg{
+.viz{
 position:relative;width:100%;height:120px;
 }
-.viz-svg div{
-position:absolute;font-size:12px;
+.viz .pt{
+position:absolute;font-size:11px;
 transform:translate(-50%,-50%);
 }
 
 .airway-list{
 line-height:1.1;font-size:13px;
-max-height:180px;overflow-y:auto;
+max-height:180px;overflow:auto;
 }
 
 </style>
 """,unsafe_allow_html=True)
 
-# ================== STATE ==================
+# ================= UI =================
 if "airways" not in st.session_state:
     st.session_state.airways=[]
 
-# ================== LAYOUT ==================
 left,right=st.columns([1,3])
 
-# LEFT
 with left:
     st.markdown("## 📋 NOTAM INPUT")
 
-    txt=st.text_area("NOTAM",height=200,label_visibility="collapsed")
+    txt=st.text_area("NOTAM",200,label_visibility="collapsed")
 
     c1,c2=st.columns(2)
     if c1.button("Parse"):
@@ -173,36 +175,30 @@ with left:
         st.markdown(f"<div>• {a}</div>",unsafe_allow_html=True)
     st.markdown('</div>',unsafe_allow_html=True)
 
-# RIGHT
 with right:
     st.markdown("## ✈️ Airway Details")
 
     for i in range(0,len(st.session_state.airways),3):
         cols=st.columns(3)
 
-        for col,airway in zip(cols,st.session_state.airways[i:i+3]):
+        for col,a in zip(cols,st.session_state.airways[i:i+3]):
             with col:
-                group=df[df["AWID"]==airway]
+                g=df[df["AWID"]==a]
 
                 html='<div class="tile">'
-
-                # text
                 html+='<div class="text">'
-                html+=f"<b style='color:#4CAF50'>{airway}</b><br>"
-                coords=[]
+                html+=f"<b style='color:#4CAF50'>{a}</b><br>"
 
-                for _,r in group.iterrows():
+                coords=[]
+                for _,r in g.iterrows():
                     lat,lon=parse_coord(r["COORDS"])
                     coords.append((r["WAYPOINT"],r["COUNTRY"],lat,lon))
                     html+=f"{r['WAYPOINT']} ({r['COUNTRY']})<br>"
 
                 html+='</div>'
-
-                # viz
                 html+='<div class="vizbox">'
-                html+=get_visual_block(coords)
+                html+=get_visual(coords)
                 html+='</div>'
-
                 html+='</div>'
 
                 st.markdown(html,unsafe_allow_html=True)
