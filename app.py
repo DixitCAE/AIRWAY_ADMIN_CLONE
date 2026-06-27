@@ -35,11 +35,21 @@ def extract_airways(text):
     return sorted(set(tokens) & valid_airways)
 
 # =========================
-# CUSTOM CSS (IMPORTANT)
+# CUSTOM CSS
 # =========================
 st.markdown("""
 <style>
 
+/* Left Panel Scroll */
+.airway-list {
+    background-color: #111;
+    padding: 10px;
+    border-radius: 6px;
+    max-height: 200px;
+    overflow-y: auto;
+}
+
+/* Tile Style */
 .tile {
     background-color: #0e1117;
     border: 1px solid #333;
@@ -50,24 +60,17 @@ st.markdown("""
     color: white;
 }
 
+/* Tile Title */
 .tile-title {
     font-weight: bold;
     font-size: 16px;
-    margin-bottom: 5px;
+    margin-bottom: 8px;
     color: #4CAF50;
 }
 
-.left-panel {
-    border-right: 1px solid #333;
-    padding-right: 10px;
-}
-
-.airway-list {
-    background-color: #111;
-    padding: 10px;
-    border-radius: 6px;
-    max-height: 200px;
-    overflow-y: auto;
+/* Improve spacing */
+.block-container {
+    padding-top: 1rem;
 }
 
 </style>
@@ -79,38 +82,52 @@ st.markdown("""
 left, right = st.columns([1, 3])
 
 # =========================
+# SESSION STATE
+# =========================
+if "airways" not in st.session_state:
+    st.session_state.airways = []
+
+if "notam_text" not in st.session_state:
+    st.session_state.notam_text = ""
+
+# =========================
 # LEFT PANEL
 # =========================
 with left:
     st.markdown("## 📋 NOTAM INPUT")
 
-    notam_input = st.text_area("", height=200, placeholder="Paste NOTAM here...")
+    notam_input = st.text_area(
+        "NOTAM Input",
+        value=st.session_state.notam_text,
+        height=220,
+        placeholder="Paste NOTAM here...\nExample:\nAR16/Y299 CLSD...",
+        label_visibility="collapsed"
+    )
 
     col1, col2 = st.columns(2)
-    parse_clicked = col1.button("🚀 Parse")
-    clear_clicked = col2.button("Clear")
 
-    if clear_clicked:
-        notam_input = ""
-
-    # placeholder for results
-    if "airways" not in st.session_state:
-        st.session_state.airways = []
-
-    if parse_clicked:
+    if col1.button("🚀 Parse"):
+        st.session_state.notam_text = notam_input
         st.session_state.airways = extract_airways(notam_input)
+
+    if col2.button("Clear"):
+        st.session_state.notam_text = ""
+        st.session_state.airways = []
 
     st.markdown("### ✅ Detected Airways")
 
     st.markdown('<div class="airway-list">', unsafe_allow_html=True)
 
-    for a in st.session_state.airways:
-        st.write(f"• {a}")
+    if st.session_state.airways:
+        for a in st.session_state.airways:
+            st.write(f"• {a}")
+    else:
+        st.write("No airways detected")
 
     st.markdown('</div>', unsafe_allow_html=True)
 
 # =========================
-# RIGHT PANEL (GRID)
+# RIGHT PANEL
 # =========================
 with right:
     st.markdown("## ✈️ Airway Details")
@@ -118,20 +135,16 @@ with right:
     airways = st.session_state.airways
 
     if airways:
-
-        # chunk into rows of 3
+        # Create grid (3 per row)
         for i in range(0, len(airways), 3):
-            row_airways = airways[i:i+3]
             cols = st.columns(3)
+            row_airways = airways[i:i+3]
 
             for col, airway in zip(cols, row_airways):
-
                 with col:
-
                     if airway in df.index:
                         data = df.loc[[airway]]
 
-                        # HTML tile
                         html = f'<div class="tile">'
                         html += f'<div class="tile-title">{airway}</div>'
 
@@ -141,6 +154,5 @@ with right:
                         html += "</div>"
 
                         st.markdown(html, unsafe_allow_html=True)
-
     else:
-        st.info("Paste NOTAM and click Parse")
+        st.info("Paste NOTAM and click Parse to view airway tiles")
