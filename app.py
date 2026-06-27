@@ -21,7 +21,73 @@ df = load_data()
 valid_airways = set(df["AWID"].unique())
 
 # =========================
-# COORD PARSER (UNCHANGED)
+# ✅ ✅ RESTORED CSS (CRITICAL FIX)
+# =========================
+st.markdown("""
+<style>
+
+.tile {
+    background-color: #0e1117;
+    border: 1px solid #333;
+    border-radius: 8px;
+    padding: 12px;
+    height: 300px;
+    display: flex;
+    gap: 10px;
+}
+
+.text-block {
+    width: 60%;
+    overflow-y: auto;
+}
+
+.viz-container {
+    width: 40%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.line-vertical {
+    width: 3px;
+    height: 80px;
+    background: #ff4d4d;
+    margin: auto;
+}
+
+.viz-horizontal {
+    width: 100%;
+    text-align: center;
+    position: relative;
+}
+
+.h-label {
+    position: absolute;
+    top: -5px;
+    font-size: 11px;
+}
+
+.h-label.left { left: 0; }
+.h-label.right { right: 0; }
+
+.line-horizontal {
+    height: 3px;
+    width: 70%;
+    background: #ff4d4d;
+    margin: 15px auto 0 auto;
+}
+
+.tile-title {
+    color: #4CAF50;
+    font-weight: bold;
+    margin-bottom: 8px;
+}
+
+</style>
+""", unsafe_allow_html=True)
+
+# =========================
+# COORD PARSER
 # =========================
 def parse_coord(coord):
     try:
@@ -38,7 +104,7 @@ def parse_coord(coord):
         return None, None
 
 # =========================
-# VISUAL BLOCK (DO NOT TOUCH ✅)
+# VISUAL BLOCK (UNCHANGED)
 # =========================
 def get_visual_block(coords_list):
     coords = [(w, lat, lon) for (w, c, lat, lon) in coords_list if lat is not None]
@@ -72,22 +138,16 @@ def get_visual_block(coords_list):
         """
 
 # =========================
-# EXTRACT AIRWAYS (UNCHANGED)
+# PARSERS
 # =========================
 def normalize(text):
-    text = text.upper()
-    text = re.sub(r"[^A-Z0-9/ ]", " ", text)
-    return text
+    return re.sub(r"[^A-Z0-9/ ]", " ", text.upper())
 
 def extract_airways(text):
     tokens = re.split(r"[ /]+", normalize(text))
     return sorted(set(tokens) & valid_airways)
 
-# =========================
-# ✅ NEW FEATURE: SEGMENT EXTRACTION
-# =========================
 def extract_segments(notam_text, airways):
-
     results = []
     lines = notam_text.split("\n")
 
@@ -95,18 +155,13 @@ def extract_segments(notam_text, airways):
         found = False
 
         for line in lines:
-
-            clean = re.sub(r"[^A-Z0-9/ ]", " ", line.upper())
+            clean = normalize(line)
 
             if airway in clean:
-
-                # ✅ BTN parser (robust)
                 match = re.search(r"BTN\s+([A-Z0-9]+)\s+AND\s+([A-Z0-9]+)", clean)
 
                 if match:
-                    wp1 = match.group(1)
-                    wp2 = match.group(2)
-
+                    wp1, wp2 = match.group(1), match.group(2)
                     airway_points = df[df["AWID"] == airway]["WAYPOINT"].tolist()
 
                     if wp1 in airway_points and wp2 in airway_points:
@@ -129,7 +184,7 @@ if "segments" not in st.session_state:
     st.session_state.segments = []
 
 # =========================
-# MAIN LAYOUT (UNCHANGED ✅)
+# LAYOUT
 # =========================
 left, right = st.columns([1,3])
 
@@ -139,61 +194,45 @@ left, right = st.columns([1,3])
 with left:
     st.markdown("## 📋 NOTAM INPUT")
 
-    notam_input = st.text_area(
-        "NOTAM",
-        height=200,
-        placeholder="Paste NOTAM here...",
-        label_visibility="collapsed"
-    )
+    txt = st.text_area("NOTAM", height=200, label_visibility="collapsed")
 
     c1, c2 = st.columns(2)
 
     if c1.button("🚀 Parse"):
-        airways = extract_airways(notam_input)
+        airways = extract_airways(txt)
         st.session_state.airways = airways
-        st.session_state.segments = extract_segments(notam_input, airways)
+        st.session_state.segments = extract_segments(txt, airways)
 
     if c2.button("Clear"):
         st.session_state.airways = []
         st.session_state.segments = []
 
-    # ✅ ONLY LOCAL SPLIT (no global layout change)
-    col_air, col_out = st.columns(2)
+    col1, col2 = st.columns(2)
 
-    # Airways list
-    with col_air:
+    with col1:
         st.markdown("### ✅ Airways")
         for a in st.session_state.airways:
             st.write(f"• {a}")
 
-    # Restriction output
-    with col_out:
+    with col2:
         st.markdown("### 📌 Output")
         if st.session_state.segments:
-            st.text_area(
-                "Copy",
-                value="\n".join(st.session_state.segments),
-                height=260
-            )
+            st.text_area("Copy", value="\n".join(st.session_state.segments), height=250)
 
 # =========================
-# RIGHT PANEL (UNTOUCHED ✅)
+# RIGHT PANEL (UNCHANGED)
 # =========================
 with right:
-
     st.markdown("## ✈️ Airway Details")
 
     for i in range(0, len(st.session_state.airways), 3):
-
         cols = st.columns(3)
 
         for col, airway in zip(cols, st.session_state.airways[i:i+3]):
-
             with col:
                 group = df[df["AWID"] == airway]
 
                 html = f'<div class="tile">'
-
                 html += '<div class="text-block">'
                 html += f'<div class="tile-title">{airway}</div>'
 
@@ -205,11 +244,9 @@ with right:
                     html += f"{r['WAYPOINT']} ({r['COUNTRY']})<br>"
 
                 html += '</div>'
-
                 html += '<div class="viz-container">'
                 html += get_visual_block(coords_list)
                 html += '</div>'
-
                 html += '</div>'
 
                 st.markdown(html, unsafe_allow_html=True)
