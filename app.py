@@ -38,7 +38,7 @@ def parse_coord(coord):
         return None, None
 
 # =========================
-# VISUAL BLOCK (FIXED)
+# ✅ NEW VISUAL LOGIC (3 MODES)
 # =========================
 def get_visual_block(coords_list):
 
@@ -56,8 +56,10 @@ def get_visual_block(coords_list):
     dlat = north[1] - south[1]
     dlon = east[2] - west[2]
 
-    # VERTICAL
-    if abs(dlat) >= abs(dlon):
+    ratio = abs(dlat) / (abs(dlon) + 1e-6)
+
+    # ---------- VERTICAL ----------
+    if ratio > 1.5:
         return f"""
         <div class="viz">
             <div class="label">{north[0]}</div>
@@ -66,8 +68,8 @@ def get_visual_block(coords_list):
         </div>
         """
 
-    # HORIZONTAL ✅ FIXED SPACING
-    else:
+    # ---------- HORIZONTAL ----------
+    elif ratio < 0.67:
         return f"""
         <div class="viz-horizontal">
             <div class="h-label left">{west[0]}</div>
@@ -75,6 +77,31 @@ def get_visual_block(coords_list):
             <div class="line-horizontal"></div>
         </div>
         """
+
+    # ---------- ✅ DIAGONAL ----------
+    else:
+        # decide slope direction
+        # NW -> SE OR NE -> SW
+
+        # NW = north lat + west lon
+        if north[2] < east[2]:
+            # NW → SE (down-right)
+            return f"""
+            <div class="viz-diagonal">
+                <div class="tl">{north[0]}</div>
+                <div class="diag-down"></div>
+                <div class="br">{south[0]}</div>
+            </div>
+            """
+        else:
+            # NE → SW (down-left)
+            return f"""
+            <div class="viz-diagonal">
+                <div class="tr">{north[0]}</div>
+                <div class="diag-up"></div>
+                <div class="bl">{south[0]}</div>
+            </div>
+            """
 
 # =========================
 # EXTRACT AIRWAYS
@@ -90,7 +117,7 @@ def extract_airways(text):
     return sorted(set(tokens) & valid_airways)
 
 # =========================
-# CSS (FINAL POLISHED)
+# ✅ CSS (FINAL)
 # =========================
 st.markdown("""
 <style>
@@ -110,13 +137,13 @@ st.markdown("""
     gap: 10px;
 }
 
-/* TEXT BLOCK */
+/* TEXT */
 .text-block {
     width: 60%;
     overflow-y: auto;
 }
 
-/* VISUAL BLOCK */
+/* VISUAL */
 .viz-container {
     width: 40%;
     display: flex;
@@ -124,17 +151,19 @@ st.markdown("""
     justify-content: center;
 }
 
-/* VISUAL */
-.viz {
-    text-align: center;
-    font-size: 12px;
+/* ---------- VERTICAL ---------- */
+.line-vertical {
+    width: 3px;
+    height: 80px;
+    background: red;
+    margin: auto;
 }
 
-/* HORIZONTAL FIXED */
+/* ---------- HORIZONTAL ---------- */
 .viz-horizontal {
     width: 100%;
-    text-align: center;
     position: relative;
+    text-align: center;
 }
 
 .h-label {
@@ -154,20 +183,37 @@ st.markdown("""
 .line-horizontal {
     height: 3px;
     width: 70%;
-    background: #ff4d4d;
+    background: red;
     margin: 15px auto 0 auto;
 }
 
-.line-vertical {
-    width: 3px;
+/* ---------- DIAGONAL ---------- */
+.viz-diagonal {
+    width: 100%;
     height: 80px;
-    background: #ff4d4d;
+    position: relative;
+}
+
+.diag-down {
+    width: 3px;
+    height: 100%;
+    background: red;
+    transform: rotate(45deg);
     margin: auto;
 }
 
-.label {
-    margin: 4px 0;
+.diag-up {
+    width: 3px;
+    height: 100%;
+    background: red;
+    transform: rotate(-45deg);
+    margin: auto;
 }
+
+.tl { position:absolute; top:0; left:0; font-size:11px;}
+.tr { position:absolute; top:0; right:0; font-size:11px;}
+.bl { position:absolute; bottom:0; left:0; font-size:11px;}
+.br { position:absolute; bottom:0; right:0; font-size:11px;}
 
 /* TITLE */
 .tile-title {
@@ -176,22 +222,12 @@ st.markdown("""
     margin-bottom: 8px;
 }
 
-/* ✅ FIX 1: compact airway list */
+/* ✅ COMPACT LIST */
 .airway-list {
     max-height: 180px;
     overflow-y: auto;
-    line-height: 1.2;   /* reduces spacing */
+    line-height: 1.1;
     font-size: 13px;
-}
-
-/* remove extra margins */
-.airway-list div {
-    margin: 0;
-    padding: 0;
-}
-
-h2 {
-    margin-top: 12px !important;
 }
 
 </style>
@@ -209,7 +245,7 @@ if "airways" not in st.session_state:
 left, right = st.columns([1,3])
 
 # =========================
-# LEFT PANEL
+# LEFT
 # =========================
 with left:
     st.markdown("## 📋 NOTAM INPUT")
@@ -217,7 +253,7 @@ with left:
     notam_input = st.text_area(
         "NOTAM",
         height=200,
-        placeholder="Paste NOTAM here...",
+        placeholder="Paste NOTAM...",
         label_visibility="collapsed"
     )
 
@@ -233,14 +269,13 @@ with left:
 
     st.markdown('<div class="airway-list">', unsafe_allow_html=True)
 
-    # ✅ FIXED: compact rendering (no st.write)
     for a in st.session_state.airways:
         st.markdown(f"<div>• {a}</div>", unsafe_allow_html=True)
 
     st.markdown('</div>', unsafe_allow_html=True)
 
 # =========================
-# RIGHT PANEL
+# RIGHT
 # =========================
 with right:
 
@@ -257,7 +292,7 @@ with right:
 
                 html = f'<div class="tile">'
 
-                # LEFT
+                # TEXT
                 html += '<div class="text-block">'
                 html += f'<div class="tile-title">{airway}</div>'
 
@@ -272,7 +307,7 @@ with right:
 
                 html += '</div>'
 
-                # RIGHT VISUAL
+                # VISUAL
                 html += '<div class="viz-container">'
                 html += get_visual_block(coords_list)
                 html += '</div>'
