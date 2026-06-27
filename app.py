@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import re
+import math
 
 # =========================
 # CONFIG
@@ -38,7 +39,13 @@ def parse_coord(coord):
         return None, None
 
 # =========================
-# ✅ NEW VISUAL LOGIC (3 MODES)
+# DISTANCE
+# =========================
+def dist(a, b):
+    return math.sqrt((a[1]-b[1])**2 + (a[2]-b[2])**2)
+
+# =========================
+# ✅ FINAL VISUAL BLOCK
 # =========================
 def get_visual_block(coords_list):
 
@@ -78,28 +85,31 @@ def get_visual_block(coords_list):
         </div>
         """
 
-    # ---------- ✅ DIAGONAL ----------
+    # ---------- ✅ DIAGONAL (FIXED PROPERLY) ----------
     else:
-        # decide slope direction
-        # NW -> SE OR NE -> SW
+        # compute corners
+        nw = min(coords, key=lambda x: (-x[1], x[2]))
+        ne = max(coords, key=lambda x: (x[1], x[2]))
+        sw = min(coords, key=lambda x: (x[1], x[2]))
+        se = max(coords, key=lambda x: (-x[1], x[2]))
 
-        # NW = north lat + west lon
-        if north[2] < east[2]:
-            # NW → SE (down-right)
+        # choose correct diagonal
+        if dist(nw, se) > dist(ne, sw):
+            start, end = nw, se  # ↘
             return f"""
-            <div class="viz-diagonal">
-                <div class="tl">{north[0]}</div>
-                <div class="diag-down"></div>
-                <div class="br">{south[0]}</div>
+            <div class="diag-container">
+                <div class="start tl">{start[0]}</div>
+                <div class="line diag-down"></div>
+                <div class="end br">{end[0]}</div>
             </div>
             """
         else:
-            # NE → SW (down-left)
+            start, end = ne, sw  # ↙
             return f"""
-            <div class="viz-diagonal">
-                <div class="tr">{north[0]}</div>
-                <div class="diag-up"></div>
-                <div class="bl">{south[0]}</div>
+            <div class="diag-container">
+                <div class="start tr">{start[0]}</div>
+                <div class="line diag-up"></div>
+                <div class="end bl">{end[0]}</div>
             </div>
             """
 
@@ -117,7 +127,7 @@ def extract_airways(text):
     return sorted(set(tokens) & valid_airways)
 
 # =========================
-# ✅ CSS (FINAL)
+# CSS (FINAL FIXED)
 # =========================
 st.markdown("""
 <style>
@@ -151,7 +161,7 @@ st.markdown("""
     justify-content: center;
 }
 
-/* ---------- VERTICAL ---------- */
+/* VERTICAL */
 .line-vertical {
     width: 3px;
     height: 80px;
@@ -159,7 +169,7 @@ st.markdown("""
     margin: auto;
 }
 
-/* ---------- HORIZONTAL ---------- */
+/* HORIZONTAL */
 .viz-horizontal {
     width: 100%;
     position: relative;
@@ -172,57 +182,58 @@ st.markdown("""
     font-size: 11px;
 }
 
-.h-label.left {
-    left: 0;
-}
-
-.h-label.right {
-    right: 0;
-}
+.h-label.left { left: 0; }
+.h-label.right { right: 0; }
 
 .line-horizontal {
     height: 3px;
     width: 70%;
     background: red;
-    margin: 15px auto 0 auto;
+    margin: 15px auto;
 }
 
-/* ---------- DIAGONAL ---------- */
-.viz-diagonal {
-    width: 100%;
-    height: 80px;
+/* ✅ DIAGONAL FIX */
+.diag-container {
     position: relative;
+    width: 100%;
+    height: 100px;
 }
 
+.line {
+    position: absolute;
+    width: 80%;
+    height: 3px;
+    background: red;
+}
+
+/* ↘ */
 .diag-down {
-    width: 3px;
-    height: 100%;
-    background: red;
+    top: 10px;
+    left: 10%;
     transform: rotate(45deg);
-    margin: auto;
 }
 
+/* ↙ */
 .diag-up {
-    width: 3px;
-    height: 100%;
-    background: red;
+    top: 10px;
+    left: 10%;
     transform: rotate(-45deg);
-    margin: auto;
 }
 
+/* LABEL POSITIONS */
 .tl { position:absolute; top:0; left:0; font-size:11px;}
 .tr { position:absolute; top:0; right:0; font-size:11px;}
 .bl { position:absolute; bottom:0; left:0; font-size:11px;}
 .br { position:absolute; bottom:0; right:0; font-size:11px;}
 
-/* TITLE */
+/* TEXT */
 .tile-title {
     color: #4CAF50;
     font-weight: bold;
     margin-bottom: 8px;
 }
 
-/* ✅ COMPACT LIST */
+/* LIST */
 .airway-list {
     max-height: 180px;
     overflow-y: auto;
@@ -245,7 +256,7 @@ if "airways" not in st.session_state:
 left, right = st.columns([1,3])
 
 # =========================
-# LEFT
+# LEFT PANEL
 # =========================
 with left:
     st.markdown("## 📋 NOTAM INPUT")
@@ -268,14 +279,12 @@ with left:
     st.markdown("### ✅ Airways")
 
     st.markdown('<div class="airway-list">', unsafe_allow_html=True)
-
     for a in st.session_state.airways:
         st.markdown(f"<div>• {a}</div>", unsafe_allow_html=True)
-
     st.markdown('</div>', unsafe_allow_html=True)
 
 # =========================
-# RIGHT
+# RIGHT PANEL
 # =========================
 with right:
 
@@ -292,7 +301,7 @@ with right:
 
                 html = f'<div class="tile">'
 
-                # TEXT
+                # text
                 html += '<div class="text-block">'
                 html += f'<div class="tile-title">{airway}</div>'
 
@@ -307,7 +316,7 @@ with right:
 
                 html += '</div>'
 
-                # VISUAL
+                # visual
                 html += '<div class="viz-container">'
                 html += get_visual_block(coords_list)
                 html += '</div>'
@@ -315,3 +324,4 @@ with right:
                 html += '</div>'
 
                 st.markdown(html, unsafe_allow_html=True)
+``
