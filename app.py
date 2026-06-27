@@ -19,7 +19,15 @@ valid_airways = set(df["AWID"].unique())
 # ================= CSS =================
 st.markdown("""
 <style>
-.tile {background:#0e1117;border:1px solid #333;border-radius:8px;padding:12px;height:300px;display:flex;gap:10px;}
+.tile {
+    background:#0e1117;
+    border:1px solid #333;
+    border-radius:8px;
+    padding:12px;
+    height:300px;
+    display:flex;
+    gap:10px;
+}
 .text-block {width:60%;overflow:auto;}
 .viz-container {width:40%;display:flex;align-items:center;justify-content:center;}
 
@@ -27,7 +35,8 @@ st.markdown("""
 
 .viz-horizontal {position:relative;text-align:center;}
 .h-label {position:absolute;top:-5px;font-size:11px;}
-.h-label.left{left:0;} .h-label.right{right:0;}
+.h-label.left{left:0;}
+.h-label.right{right:0;}
 
 .line-horizontal{height:3px;width:70%;background:#ff4d4d;margin:15px auto;}
 
@@ -69,36 +78,39 @@ def parse_coord(coord):
     except:
         return None, None
 
-# ================= ✅ VISUAL FIX =================
+# ================= ✅ YOUR ORIGINAL VISUAL BLOCK =================
 def get_visual_block(coords_list):
 
-    coords = [(w,lat,lon) for (w,c,lat,lon) in coords_list 
-              if lat is not None and lon is not None]
+    coords = [(w, lat, lon) for (w, c, lat, lon) in coords_list if lat is not None]
 
     if len(coords) < 2:
-        return "<div style='color:#666'>•</div>"
+        return ""
 
-    north=max(coords,key=lambda x:x[1])
-    south=min(coords,key=lambda x:x[1])
-    east=max(coords,key=lambda x:x[2])
-    west=min(coords,key=lambda x:x[2])
+    # extremes
+    north = max(coords, key=lambda x: x[1])
+    south = min(coords, key=lambda x: x[1])
+    east = max(coords, key=lambda x: x[2])
+    west = min(coords, key=lambda x: x[2])
 
     dlat = north[1] - south[1]
     dlon = east[2] - west[2]
 
+    # VERTICAL
     if abs(dlat) >= abs(dlon):
         return f"""
-        <div style="text-align:center">
-            {north[0]}<br>
+        <div class="viz">
+            <div class="label">{north[0]}</div>
             <div class="line-vertical"></div>
-            {south[0]}
+            <div class="label">{south[0]}</div>
         </div>
         """
+
+    # HORIZONTAL
     else:
         return f"""
         <div class="viz-horizontal">
-            <span class="h-label left">{west[0]}</span>
-            <span class="h-label right">{east[0]}</span>
+            <div class="h-label left">{west[0]}</div>
+            <div class="h-label right">{east[0]}</div>
             <div class="line-horizontal"></div>
         </div>
         """
@@ -111,9 +123,9 @@ def extract_airways(t):
     return sorted(set(re.split(r"[ /]+", normalize(t))) & valid_airways)
 
 # ================= HELPERS =================
-def get_airway_coords(airway):
+def get_airway_coords(a):
     allowed = ["KZ","K1","K2","K3","K4","K5","K6","K7"]
-    g = df[(df["AWID"]==airway) & (df["COUNTRY"].isin(allowed))]
+    g = df[(df["AWID"]==a) & (df["COUNTRY"].isin(allowed))]
 
     coords=[]
     for _,r in g.iterrows():
@@ -121,6 +133,10 @@ def get_airway_coords(airway):
         coords.append((r["WAYPOINT"], r["COUNTRY"], lat, lon))
 
     return coords
+
+def full_segment(a):
+    coords=get_airway_coords(a)
+    return f"{coords[0][0]}-{coords[-1][0]}" if coords else "ENTER MANUALLY"
 
 # ================= SEGMENT ENGINE =================
 def extract_segments(text, airways):
@@ -132,39 +148,35 @@ def extract_segments(text, airways):
 
         clean = normalize(line)
 
-        # ✅ only process CLSD lines
         if "CLSD" not in clean:
             continue
 
         matched = [a for a in airways if a in clean]
 
-        # ✅ DISTANCE (ONLY SE case for now)
+        # ===== DISTANCE =====
         m = re.search(r"BTN\s+(\w+)\s+AND\s+(\d+)NM\s+(SE)", clean)
         if m:
-            base,dist,dirn = m.group(1), int(m.group(2)), m.group(3)
+            base, dist, dirn = m.group(1), int(m.group(2)), m.group(3)
 
             for a in matched:
                 key=(a,base,dist)
                 if key in seen: continue
 
-                # find next waypoint after base
-                coords=[(w,lat,lon) for (w,c,lat,lon) in get_airway_coords(a)]
-                names=[c[0] for c in coords]
-
-                if base in names:
-                    idx = names.index(base)
-                    next_wp = names[idx+1] if idx+1 < len(names) else "ENTER MANUALLY"
+                coords=[c[0] for c in get_airway_coords(a)]
+                if base in coords:
+                    idx=coords.index(base)
+                    nxt=coords[idx+1] if idx+1<len(coords) else "ENTER MANUALLY"
                 else:
-                    next_wp = "WAYPOINT NOT FOUND"
+                    nxt="WAYPOINT NOT FOUND"
 
-                results.append(f"{a} {base}-{next_wp}")
+                results.append(f"{a} {base}-{nxt}")
                 seen.add(key)
             continue
 
-        # ✅ BTN
+        # ===== BTN =====
         m = re.search(r"BTN\s+(\w+)\s+AND\s+(\w+)", clean)
         if m:
-            wp1,wp2 = m.group(1), m.group(2)
+            wp1, wp2 = m.group(1), m.group(2)
 
             for a in matched:
                 key=(a,wp1,wp2)
@@ -174,7 +186,7 @@ def extract_segments(text, airways):
                 seen.add(key)
             continue
 
-        # ✅ DIRECTION
+        # ===== DIRECTION =====
         m = re.search(r"(N|S|E|W)\s+OF\s+(\w+)", clean)
         if m:
             dirn, wp = m.group(1), m.group(2)
@@ -183,34 +195,28 @@ def extract_segments(text, airways):
                 key=(a,wp,dirn)
                 if key in seen: continue
 
-                coords = get_airway_coords(a)
-                names=[c[0] for c in coords]
+                coords=[c[0] for c in get_airway_coords(a)]
 
-                if wp in names:
-                    idx = names.index(wp)
+                if wp in coords:
+                    idx=coords.index(wp)
 
-                    if dirn=="S":
-                        nxt = names[idx+1] if idx+1<len(names) else "ENTER MANUALLY"
-                    elif dirn=="N":
-                        nxt = names[idx-1] if idx>0 else "ENTER MANUALLY"
-                    elif dirn=="E":
-                        nxt = names[idx+1] if idx+1<len(names) else "ENTER MANUALLY"
+                    if dirn in ["S","E"]:
+                        nxt=coords[idx+1] if idx+1<len(coords) else "ENTER MANUALLY"
                     else:
-                        nxt = names[idx-1] if idx>0 else "ENTER MANUALLY"
+                        nxt=coords[idx-1] if idx>0 else "ENTER MANUALLY"
 
                     results.append(f"{a} {wp}-{nxt}")
+
                 else:
                     results.append(f"{a} WAYPOINT NOT FOUND-ENTER MANUALLY")
 
                 seen.add(key)
             continue
 
-        # ✅ FULL AIRWAY
+        # ===== FULL =====
         for a in matched:
             if a not in [r.split()[0] for r in results]:
-                coords=get_airway_coords(a)
-                if coords:
-                    results.append(f"{a} {coords[0][0]}-{coords[-1][0]}")
+                results.append(f"{a} {full_segment(a)}")
 
     return results
 
@@ -221,23 +227,23 @@ if "segments" not in st.session_state:
     st.session_state.segments=[]
 
 # ================= UI =================
-left,right = st.columns([1,3])
+left,right=st.columns([1,3])
 
 with left:
-    txt = st.text_area("NOTAM", height=200)
+    txt=st.text_area("NOTAM",height=200)
 
-    c1,c2 = st.columns(2)
+    c1,c2=st.columns(2)
 
     if c1.button("Parse"):
-        aw = extract_airways(txt)
-        st.session_state.airways = aw
-        st.session_state.segments = extract_segments(txt, aw)
+        aw=extract_airways(txt)
+        st.session_state.airways=aw
+        st.session_state.segments=extract_segments(txt,aw)
 
     if c2.button("Clear"):
         st.session_state.airways=[]
         st.session_state.segments=[]
 
-    col1,col2 = st.columns([1,1.7])
+    col1,col2=st.columns([1,1.7])
 
     with col1:
         st.markdown("### ✅ Airways")
@@ -247,27 +253,27 @@ with left:
     with col2:
         st.markdown("### 📌 Output")
         if st.session_state.segments:
-            st.text_area("", "\n".join(st.session_state.segments), height=260)
+            st.text_area("", "\n".join(st.session_state.segments),height=260)
 
 # ================= RIGHT =================
 with right:
     st.markdown("## ✈️ Airway Details")
 
-    for i in range(0, len(st.session_state.airways), 3):
-        cols = st.columns(3)
+    for i in range(0,len(st.session_state.airways),3):
+        cols=st.columns(3)
 
-        for col, aw in zip(cols, st.session_state.airways[i:i+3]):
+        for col,aw in zip(cols,st.session_state.airways[i:i+3]):
             with col:
-                coords = get_airway_coords(aw)
+                coords=get_airway_coords(aw)
 
-                html = '<div class="tile"><div class="text-block">'
-                html += f'<div class="tile-title">{aw}</div>'
+                html='<div class="tile"><div class="text-block">'
+                html+=f'<div class="tile-title">{aw}</div>'
 
                 for w,c,lat,lon in coords:
-                    html += f"{w} ({c})<br>"
+                    html+=f"{w} ({c})<br>"
 
-                html += '</div><div class="viz-container">'
-                html += get_visual_block(coords)
-                html += '</div></div>'
+                html+='</div><div class="viz-container">'
+                html+=get_visual_block(coords)
+                html+='</div></div>'
 
-                st.markdown(html, unsafe_allow_html=True)
+                st.markdown(html,unsafe_allow_html=True)
