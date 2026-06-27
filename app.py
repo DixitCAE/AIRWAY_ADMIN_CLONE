@@ -5,105 +5,142 @@ import re
 # =========================
 # CONFIG
 # =========================
-st.set_page_config(page_title="NOTAM Airway Parser", layout="wide")
-
-# =========================
-# LOAD DATA (FROM REPO FILE)
-# =========================
-@st.cache_data
-def load_data():
-    df = pd.read_csv("waypoints.csv", engine="python")
-
-    # Clean column names
-    df.columns = ["AWID", "WAYPOINT", "COUNTRY", "COORDS"]
-
-    # Normalize AWID
-    df["AWID"] = df["AWID"].astype(str).str.strip().str.upper()
-
-    return df
-
-# =========================
-# NORMALIZE TEXT
-# =========================
-def normalize_text(text):
-    text = text.upper()
-
-    # Remove unwanted chars except slash and space
-    text = re.sub(r"[^A-Z0-9/ ]", " ", text)
-
-    return text
-
-# =========================
-# EXTRACT AIRWAYS (HYBRID APPROACH)
-# =========================
-def extract_airways(notam_text, valid_airways_set):
-    text = normalize_text(notam_text)
-
-    # Split using space and slash
-    tokens = re.split(r"[ /]+", text)
-
-    tokens_set = set(tokens)
-
-    # Intersection with real airway DB
-    found_airways = sorted(tokens_set & valid_airways_set)
-
-    return found_airways
-
-# =========================
-# GET FILTERED DATA
-# =========================
-def get_airway_data(df, airways):
-    return df[df["AWID"].isin(airways)]
+st.set_page_config(layout="wide")
 
 # =========================
 # LOAD DATA
 # =========================
+@st.cache_data
+def load_data():
+    df = pd.read_csv("waypoints.csv", engine="python")
+    df.columns = ["AWID", "WAYPOINT", "COUNTRY", "COORDS"]
+    df["AWID"] = df["AWID"].astype(str).str.upper().str.strip()
+    df.set_index("AWID", inplace=True)
+    return df
+
 df = load_data()
-
-# Precompute airway set (VERY FAST LOOKUP)
-valid_airways_set = set(df["AWID"].unique())
+valid_airways = set(df.index.unique())
 
 # =========================
-# UI
+# TEXT PROCESSING
 # =========================
-st.title("✈️ NOTAM Airway Parser")
+def normalize(text):
+    text = text.upper()
+    text = re.sub(r"[^A-Z0-9/ ]", " ", text)
+    return text
 
-st.success(f"✅ Loaded Airway Database | Total Airways: {len(valid_airways_set)}")
+def extract_airways(text):
+    text = normalize(text)
+    tokens = re.split(r"[ /]+", text)
+    return sorted(set(tokens) & valid_airways)
 
-notam_text = st.text_area("📋 Paste NOTAM text here", height=300)
+# =========================
+# CUSTOM CSS (IMPORTANT)
+# =========================
+st.markdown("""
+<style>
 
-if st.button("🚀 Parse NOTAM"):
-    if not notam_text.strip():
-        st.warning("⚠️ Please paste NOTAM text")
+.tile {
+    background-color: #0e1117;
+    border: 1px solid #333;
+    border-radius: 8px;
+    padding: 10px;
+    height: 320px;
+    overflow-y: auto;
+    color: white;
+}
+
+.tile-title {
+    font-weight: bold;
+    font-size: 16px;
+    margin-bottom: 5px;
+    color: #4CAF50;
+}
+
+.left-panel {
+    border-right: 1px solid #333;
+    padding-right: 10px;
+}
+
+.airway-list {
+    background-color: #111;
+    padding: 10px;
+    border-radius: 6px;
+    max-height: 200px;
+    overflow-y: auto;
+}
+
+</style>
+""", unsafe_allow_html=True)
+
+# =========================
+# LAYOUT
+# =========================
+left, right = st.columns([1, 3])
+
+# =========================
+# LEFT PANEL
+# =========================
+with left:
+    st.markdown("## 📋 NOTAM INPUT")
+
+    notam_input = st.text_area("", height=200, placeholder="Paste NOTAM here...")
+
+    col1, col2 = st.columns(2)
+    parse_clicked = col1.button("🚀 Parse")
+    clear_clicked = col2.button("Clear")
+
+    if clear_clicked:
+        notam_input = ""
+
+    # placeholder for results
+    if "airways" not in st.session_state:
+        st.session_state.airways = []
+
+    if parse_clicked:
+        st.session_state.airways = extract_airways(notam_input)
+
+    st.markdown("### ✅ Detected Airways")
+
+    st.markdown('<div class="airway-list">', unsafe_allow_html=True)
+
+    for a in st.session_state.airways:
+        st.write(f"• {a}")
+
+    st.markdown('</div>', unsafe_allow_html=True)
+
+# =========================
+# RIGHT PANEL (GRID)
+# =========================
+with right:
+    st.markdown("## ✈️ Airway Details")
+
+    airways = st.session_state.airways
+
+    if airways:
+
+        # chunk into rows of 3
+        for i in range(0, len(airways), 3):
+            row_airways = airways[i:i+3]
+            cols = st.columns(3)
+
+            for col, airway in zip(cols, row_airways):
+
+                with col:
+
+                    if airway in df.index:
+                        data = df.loc[[airway]]
+
+                        # HTML tile
+                        html = f'<div class="tile">'
+                        html += f'<div class="tile-title">{airway}</div>'
+
+                        for _, r in data.iterrows():
+                            html += f"{r['WAYPOINT']} ({r['COUNTRY']})<br>"
+
+                        html += "</div>"
+
+                        st.markdown(html, unsafe_allow_html=True)
+
     else:
-        # Extract airways
-        airways = extract_airways(notam_text, valid_airways_set)
-
-        st.subheader(f"✅ Detected Airways ({len(airways)})")
-        st.write(airways)
-
-        if airways:
-            df_filtered = get_airway_data(df, airways)
-
-            st.subheader("📊 Airway Details")
-
-            for airway, group in df_filtered.groupby("AWID"):
-                st.markdown(f"### 🛫 {airway}")
-
-                st.dataframe(
-                    group[["WAYPOINT", "COUNTRY"]],
-                    use_container_width=True
-                )
-
-            # Download button
-            csv = df_filtered.to_csv(index=False).encode("utf-8")
-
-            st.download_button(
-                "⬇️ Download Output CSV",
-                csv,
-                "airway_output.csv",
-                "text/csv"
-            )
-
-        else:
-            st.warning("❌ No airways detected in NOTAM")
+        st.info("Paste NOTAM and click Parse")
