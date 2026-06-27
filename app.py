@@ -18,9 +18,10 @@ def load_data():
     return df
 
 df = load_data()
+valid_airways = set(df["AWID"].unique())
 
 # =========================
-# PARSE COORDS
+# COORD PARSER
 # =========================
 def parse_coord(coord):
     try:
@@ -37,41 +38,59 @@ def parse_coord(coord):
         return None, None
 
 # =========================
-# DIRECTION
+# MINI LINE GENERATOR
 # =========================
-def get_direction(lat1, lon1, lat2, lon2):
+def get_visual_block(coords_list):
 
-    dlat = lat2 - lat1
-    dlon = lon2 - lon1
+    # remove invalid
+    coords = [(w, lat, lon) for (w, c, lat, lon) in coords_list if lat is not None]
 
-    if abs(dlat) < 0.01 and abs(dlon) < 0.01:
-        return "•"
+    if len(coords) < 2:
+        return ""
 
-    if dlat > 0 and abs(dlon) < 0.01:
-        return "↑"
-    if dlat < 0 and abs(dlon) < 0.01:
-        return "↓"
-    if dlon > 0 and abs(dlat) < 0.01:
-        return "→"
-    if dlon < 0 and abs(dlat) < 0.01:
-        return "←"
+    # find extremes
+    north = max(coords, key=lambda x: x[1])
+    south = min(coords, key=lambda x: x[1])
+    east = max(coords, key=lambda x: x[2])
+    west = min(coords, key=lambda x: x[2])
 
-    if dlat > 0 and dlon > 0:
-        return "↗"
-    if dlat > 0 and dlon < 0:
-        return "↖"
-    if dlat < 0 and dlon > 0:
-        return "↘"
-    if dlat < 0 and dlon < 0:
-        return "↙"
+    dlat = north[1] - south[1]
+    dlon = east[2] - west[2]
 
-    return "•"
+    # vertical vs horizontal decision
+    if abs(dlat) >= abs(dlon):
+        # vertical
+        top = north
+        bottom = south
+
+        html = f"""
+        <div class="viz">
+            <div>{top[0]}</div>
+            <div class="line-vertical"></div>
+            <div>{bottom[0]}</div>
+        </div>
+        """
+
+    else:
+        # horizontal
+        left = west
+        right = east
+
+        html = f"""
+        <div class="viz">
+            <div style="display:flex;justify-content:space-between">
+                <span>{left[0]}</span>
+                <span>{right[0]}</span>
+            </div>
+            <div class="line-horizontal"></div>
+        </div>
+        """
+
+    return html
 
 # =========================
 # EXTRACT AIRWAYS
 # =========================
-valid_airways = set(df["AWID"].unique())
-
 def normalize(text):
     text = text.upper()
     text = re.sub(r"[^A-Z0-9/ ]", " ", text)
@@ -83,41 +102,82 @@ def extract_airways(text):
     return sorted(set(tokens) & valid_airways)
 
 # =========================
-# CSS FIXES
+# CSS (FINAL CLEAN UI)
 # =========================
 st.markdown("""
 <style>
 
 .block-container {
-    padding-top: 0.5rem !important;
+    padding-top: 1.5rem !important;
 }
 
+/* TILE */
 .tile {
     background-color: #0e1117;
     border: 1px solid #333;
     border-radius: 8px;
-    padding: 10px;
+    padding: 12px;
     height: 300px;
+    display: flex;
+    gap: 10px;
+}
+
+/* LEFT TEXT */
+.text-block {
+    width: 60%;
     overflow-y: auto;
+}
+
+/* RIGHT VISUAL */
+.viz-container {
+    width: 40%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+/* VISUAL BLOCK */
+.viz {
+    text-align: center;
+    font-size: 12px;
+}
+
+/* LINES */
+.line-vertical {
+    width: 3px;
+    height: 80px;
+    background: #ff4d4d;
+    margin: auto;
+}
+
+.line-horizontal {
+    height: 3px;
+    width: 100%;
+    background: #ff4d4d;
+    margin-top: 6px;
 }
 
 .tile-title {
-    font-weight: bold;
-    font-size: 16px;
     color: #4CAF50;
-    margin-bottom: 10px;
+    font-weight: bold;
+    margin-bottom: 8px;
 }
 
+/* LEFT PANEL LIST */
 .airway-list {
-    max-height: 180px;
+    max-height: 170px;
     overflow-y: auto;
+}
+
+h2 {
+    margin-top: 10px !important;
 }
 
 </style>
 """, unsafe_allow_html=True)
 
 # =========================
-# SESSION
+# STATE
 # =========================
 if "airways" not in st.session_state:
     st.session_state.airways = []
@@ -125,7 +185,7 @@ if "airways" not in st.session_state:
 # =========================
 # LAYOUT
 # =========================
-left, right = st.columns([1, 3])
+left, right = st.columns([1,3])
 
 # =========================
 # LEFT PANEL
@@ -148,11 +208,13 @@ with left:
     if c2.button("Clear"):
         st.session_state.airways = []
 
-    st.markdown("### ✅ Airway List")
+    st.markdown("### ✅ Airways")
 
     st.markdown('<div class="airway-list">', unsafe_allow_html=True)
+
     for a in st.session_state.airways:
         st.write(f"• {a}")
+
     st.markdown('</div>', unsafe_allow_html=True)
 
 # =========================
@@ -162,32 +224,36 @@ with right:
     st.markdown("## ✈️ Airway Details")
 
     for i in range(0, len(st.session_state.airways), 3):
+
         cols = st.columns(3)
+
         for col, airway in zip(cols, st.session_state.airways[i:i+3]):
 
             with col:
                 group = df[df["AWID"] == airway]
 
                 html = f'<div class="tile">'
+
+                # LEFT SIDE TEXT (UNCHANGED ORDER)
+                html += '<div class="text-block">'
                 html += f'<div class="tile-title">{airway}</div>'
 
                 coords_list = []
+
                 for _, r in group.iterrows():
                     lat, lon = parse_coord(r["COORDS"])
                     coords_list.append((r["WAYPOINT"], r["COUNTRY"], lat, lon))
 
-                for i in range(len(coords_list)-1):
-                    w1, c1, lat1, lon1 = coords_list[i]
-                    w2, c2, lat2, lon2 = coords_list[i+1]
+                for w, c, _, _ in coords_list:
+                    html += f"{w} ({c})<br>"
 
-                    arrow = get_direction(lat1, lon1, lat2, lon2)
+                html += '</div>'
 
-                    html += f"{w1} ({c1}) {arrow}<br>"
+                # RIGHT SIDE VISUAL
+                html += '<div class="viz-container">'
+                html += get_visual_block(coords_list)
+                html += '</div>'
 
-                # last waypoint
-                w_last, c_last, _, _ = coords_list[-1]
-                html += f"{w_last} ({c_last})"
-
-                html += "</div>"
+                html += '</div>'
 
                 st.markdown(html, unsafe_allow_html=True)
