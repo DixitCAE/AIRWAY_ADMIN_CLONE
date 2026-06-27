@@ -38,7 +38,7 @@ def parse_coord(coord):
         return None, None
 
 # =========================
-# VISUAL BLOCK (UNCHANGED)
+# VISUAL BLOCK (UNCHANGED ✅)
 # =========================
 def get_visual_block(coords_list):
     coords = [(w, lat, lon) for (w, c, lat, lon) in coords_list if lat is not None]
@@ -94,12 +94,12 @@ def extract_segments(notam_text, airways):
 
         for line in lines:
 
-            clean_line = re.sub(r"[^A-Z0-9/ ]", " ", line.upper())
+            # ✅ clean punctuation
+            clean = re.sub(r"[^A-Z0-9/ ]", " ", line.upper())
 
-            if airway in clean_line:
+            if airway in clean:
 
-                # ✅ BTN extraction FIXED
-                match = re.search(r"BTN\s+([A-Z0-9]+)\s+AND\s+([A-Z0-9]+)", clean_line)
+                match = re.search(r"BTN\s+([A-Z0-9]+)\s+AND\s+([A-Z0-9]+)", clean)
 
                 if match:
                     wp1 = match.group(1)
@@ -127,7 +127,7 @@ if "segments" not in st.session_state:
     st.session_state.segments = []
 
 # =========================
-# LAYOUT (UNCHANGED)
+# LAYOUT (UNCHANGED ✅)
 # =========================
 left, right = st.columns([1,3])
 
@@ -155,29 +155,25 @@ with left:
         st.session_state.airways = []
         st.session_state.segments = []
 
-    # ✅ SPLIT LEFT LOWER AREA
-    col_airway, col_output = st.columns(2)
+    # ✅ LOCAL SPLIT ONLY (SAFE)
+    col_air, col_out = st.columns(2)
 
-    # ---- Airways ----
-    with col_airway:
+    with col_air:
         st.markdown("### ✅ Airways")
-
         for a in st.session_state.airways:
             st.text(f"• {a}")
 
-    # ---- Restriction Output ----
-    with col_output:
+    with col_out:
         st.markdown("### 📌 Output")
-
         if st.session_state.segments:
             st.text_area(
                 "Copy",
                 value="\n".join(st.session_state.segments),
-                height=250
+                height=260
             )
 
 # =========================
-# RIGHT PANEL (UNCHANGED)
+# RIGHT PANEL (UNCHANGED ✅)
 # =========================
 with right:
 
