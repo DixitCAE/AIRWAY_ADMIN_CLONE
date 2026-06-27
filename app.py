@@ -2,9 +2,6 @@ import streamlit as st
 import pandas as pd
 import re
 
-# =========================
-# CONFIG
-# =========================
 st.set_page_config(layout="wide")
 
 # =========================
@@ -12,13 +9,13 @@ st.set_page_config(layout="wide")
 # =========================
 @st.cache_data
 def load_data():
-    df = pd.read_csv("waypoints.csv", engine="python")
-    df.columns = ["AWID", "WAYPOINT", "COUNTRY", "COORDS"]
-    df["AWID"] = df["AWID"].astype(str).str.upper().str.strip()
+    df = pd.read_csv("waypoints.csv")
+    df.columns = ["AWID","WAYPOINT","COUNTRY","COORDS"]
+    df["AWID"] = df["AWID"].str.strip().str.upper()
     return df
 
 df = load_data()
-valid_airways = set(df["AWID"].unique())
+valid_airways = set(df["AWID"])
 
 # =========================
 # COORD PARSER
@@ -38,164 +35,79 @@ def parse_coord(coord):
         return None, None
 
 # =========================
-# VISUAL BLOCK (FIXED)
+# SIMPLE VISUAL
 # =========================
-def get_visual_block(coords_list):
+def get_direction_visual(coords):
 
-    coords = [(w, lat, lon) for (w, c, lat, lon) in coords_list if lat is not None]
+    pts = [(w,lat,lon) for (w,c,lat,lon) in coords if lat is not None]
 
-    if len(coords) < 2:
+    if len(pts) < 2:
         return ""
 
-    # extremes
-    north = max(coords, key=lambda x: x[1])
-    south = min(coords, key=lambda x: x[1])
-    east = max(coords, key=lambda x: x[2])
-    west = min(coords, key=lambda x: x[2])
+    s = pts[0]
+    e = pts[-1]
 
-    dlat = north[1] - south[1]
-    dlon = east[2] - west[2]
+    dlat = e[1] - s[1]
+    dlon = e[2] - s[2]
 
-    # VERTICAL
-    if abs(dlat) >= abs(dlon):
-        return f"""
-        <div class="viz">
-            <div class="label">{north[0]}</div>
-            <div class="line-vertical"></div>
-            <div class="label">{south[0]}</div>
-        </div>
-        """
+    if abs(dlat) > abs(dlon) * 1.5:
+        top = s if s[1] > e[1] else e
+        bottom = e if s[1] > e[1] else s
+        return f"{top[0]}<br>│<br>│<br>{bottom[0]}"
 
-    # HORIZONTAL ✅ FIXED SPACING
+    elif abs(dlon) > abs(dlat) * 1.5:
+        left = s if s[2] < e[2] else e
+        right = e if s[2] < e[2] else s
+        return f"{left[0]} ───── {right[0]}"
+
     else:
-        return f"""
-        <div class="viz-horizontal">
-            <div class="h-label left">{west[0]}</div>
-            <div class="h-label right">{east[0]}</div>
-            <div class="line-horizontal"></div>
-        </div>
-        """
+        return f"{s[0]} → {e[0]}"
 
 # =========================
-# EXTRACT AIRWAYS
+# NOTAM PARSER
 # =========================
-def normalize(text):
-    text = text.upper()
-    text = re.sub(r"[^A-Z0-9/ ]", " ", text)
-    return text
+def normalize(t):
+    return re.sub(r"[^A-Z0-9/ ]"," ",t.upper())
 
-def extract_airways(text):
-    text = normalize(text)
-    tokens = re.split(r"[ /]+", text)
+def extract_airways(t):
+    tokens = re.split(r"[ /]+", normalize(t))
     return sorted(set(tokens) & valid_airways)
 
 # =========================
-# CSS (FINAL POLISHED)
+# ✅ NEW LOGIC: SEGMENT EXTRACTION
 # =========================
-st.markdown("""
-<style>
+def extract_segments(notam_text, airways):
 
-.block-container {
-    padding-top: 1.8rem !important;
-}
+    text = normalize(notam_text)
+    lines = text.split("\n")
 
-/* TILE */
-.tile {
-    background-color: #0e1117;
-    border: 1px solid #333;
-    border-radius: 8px;
-    padding: 12px;
-    height: 300px;
-    display: flex;
-    gap: 10px;
-}
+    results = []
 
-/* TEXT BLOCK */
-.text-block {
-    width: 60%;
-    overflow-y: auto;
-}
+    for airway in airways:
+        found = False
 
-/* VISUAL BLOCK */
-.viz-container {
-    width: 40%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-}
+        for line in lines:
+            if airway in line:
 
-/* VISUAL */
-.viz {
-    text-align: center;
-    font-size: 12px;
-}
+                # match: BTN X AND Y
+                match = re.search(r"BTN ([A-Z0-9]+) AND ([A-Z0-9]+)", line)
 
-/* HORIZONTAL FIXED */
-.viz-horizontal {
-    width: 100%;
-    text-align: center;
-    position: relative;
-}
+                if match:
+                    wp1 = match.group(1)
+                    wp2 = match.group(2)
 
-.h-label {
-    position: absolute;
-    top: -5px;
-    font-size: 11px;
-}
+                    # validate using dataset
+                    airway_data = df[df["AWID"] == airway]["WAYPOINT"].tolist()
 
-.h-label.left {
-    left: 0;
-}
+                    if wp1 in airway_data and wp2 in airway_data:
+                        results.append(f"{airway} {wp1}-{wp2}")
+                        found = True
+                        break
 
-.h-label.right {
-    right: 0;
-}
+        if not found:
+            results.append(f"{airway} ENTER MANUALLY")
 
-.line-horizontal {
-    height: 3px;
-    width: 70%;
-    background: #ff4d4d;
-    margin: 15px auto 0 auto;
-}
-
-.line-vertical {
-    width: 3px;
-    height: 80px;
-    background: #ff4d4d;
-    margin: auto;
-}
-
-.label {
-    margin: 4px 0;
-}
-
-/* TITLE */
-.tile-title {
-    color: #4CAF50;
-    font-weight: bold;
-    margin-bottom: 8px;
-}
-
-/* ✅ FIX 1: compact airway list */
-.airway-list {
-    max-height: 180px;
-    overflow-y: auto;
-    line-height: 1.2;   /* reduces spacing */
-    font-size: 13px;
-}
-
-/* remove extra margins */
-.airway-list div {
-    margin: 0;
-    padding: 0;
-}
-
-h2 {
-    margin-top: 12px !important;
-}
-
-</style>
-""", unsafe_allow_html=True)
+    return results
 
 # =========================
 # STATE
@@ -203,10 +115,13 @@ h2 {
 if "airways" not in st.session_state:
     st.session_state.airways = []
 
+if "segments" not in st.session_state:
+    st.session_state.segments = []
+
 # =========================
 # LAYOUT
 # =========================
-left, right = st.columns([1,3])
+left, middle, right = st.columns([1,1,2])
 
 # =========================
 # LEFT PANEL
@@ -214,30 +129,38 @@ left, right = st.columns([1,3])
 with left:
     st.markdown("## 📋 NOTAM INPUT")
 
-    notam_input = st.text_area(
-        "NOTAM",
-        height=200,
-        placeholder="Paste NOTAM here...",
-        label_visibility="collapsed"
-    )
+    txt = st.text_area("NOTAM", height=200, label_visibility="collapsed")
 
     c1, c2 = st.columns(2)
 
-    if c1.button("🚀 Parse"):
-        st.session_state.airways = extract_airways(notam_input)
+    if c1.button("Parse"):
+        airways = extract_airways(txt)
+        st.session_state.airways = airways
+        st.session_state.segments = extract_segments(txt, airways)
 
     if c2.button("Clear"):
         st.session_state.airways = []
+        st.session_state.segments = []
 
     st.markdown("### ✅ Airways")
 
-    st.markdown('<div class="airway-list">', unsafe_allow_html=True)
-
-    # ✅ FIXED: compact rendering (no st.write)
     for a in st.session_state.airways:
-        st.markdown(f"<div>• {a}</div>", unsafe_allow_html=True)
+        st.text(f"• {a}")
 
-    st.markdown('</div>', unsafe_allow_html=True)
+# =========================
+# ✅ NEW PANEL (SEGMENTS)
+# =========================
+with middle:
+    st.markdown("## 📌 Restriction Output")
+
+    if st.session_state.segments:
+        output_text = "\n".join(st.session_state.segments)
+
+        st.text_area(
+            "Copy Output",
+            value=output_text,
+            height=250
+        )
 
 # =========================
 # RIGHT PANEL
@@ -255,28 +178,16 @@ with right:
             with col:
                 group = df[df["AWID"] == airway]
 
-                html = f'<div class="tile">'
+                st.markdown(f"### {airway}")
 
-                # LEFT
-                html += '<div class="text-block">'
-                html += f'<div class="tile-title">{airway}</div>'
-
-                coords_list = []
+                coords = []
 
                 for _, r in group.iterrows():
                     lat, lon = parse_coord(r["COORDS"])
-                    coords_list.append((r["WAYPOINT"], r["COUNTRY"], lat, lon))
+                    coords.append((r["WAYPOINT"], r["COUNTRY"], lat, lon))
 
-                for w, c, _, _ in coords_list:
-                    html += f"{w} ({c})<br>"
+                    st.write(f"{r['WAYPOINT']} ({r['COUNTRY']})")
 
-                html += '</div>'
+                st.markdown("---")
 
-                # RIGHT VISUAL
-                html += '<div class="viz-container">'
-                html += get_visual_block(coords_list)
-                html += '</div>'
-
-                html += '</div>'
-
-                st.markdown(html, unsafe_allow_html=True)
+                st.markdown(get_direction_visual(coords), unsafe_allow_html=True)
