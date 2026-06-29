@@ -15,14 +15,10 @@ def load_data():
     df = pd.read_csv("waypoints.csv", engine="python")
     df.columns = ["AWID", "WAYPOINT", "COUNTRY", "COORDS"]
     df["AWID"] = df["AWID"].astype(str).str.upper().str.strip()
-    df["WAYPOINT"] = df["WAYPOINT"].astype(str).str.upper().str.strip()
-    df["COUNTRY"] = df["COUNTRY"].astype(str).str.upper().str.strip()
     return df
 
 df = load_data()
 valid_airways = set(df["AWID"].unique())
-
-VALID_COUNTRIES = {"KZ", "K1", "K2", "K3", "K4", "K5", "K6", "K7"}
 
 # =========================
 # COORD PARSER
@@ -32,21 +28,26 @@ def parse_coord(coord):
         lat = float(coord[0:2]) + float(coord[2:4])/60 + float(coord[4:6])/3600
         if coord[6] == "S":
             lat *= -1
+
         lon = float(coord[7:10]) + float(coord[10:12])/60 + float(coord[12:14])/3600
         if coord[14] == "W":
             lon *= -1
+
         return lat, lon
     except:
         return None, None
 
 # =========================
-# VISUAL BLOCK
+# VISUAL BLOCK (FIXED)
 # =========================
 def get_visual_block(coords_list):
+
     coords = [(w, lat, lon) for (w, c, lat, lon) in coords_list if lat is not None]
+
     if len(coords) < 2:
         return ""
 
+    # extremes
     north = max(coords, key=lambda x: x[1])
     south = min(coords, key=lambda x: x[1])
     east = max(coords, key=lambda x: x[2])
@@ -55,112 +56,152 @@ def get_visual_block(coords_list):
     dlat = north[1] - south[1]
     dlon = east[2] - west[2]
 
+    # VERTICAL
     if abs(dlat) >= abs(dlon):
-        return f"{north[0]}<br>{south[0]}"
+        return f"""
+        <div class="viz">
+            <div class="label">{north[0]}</div>
+            <div class="line-vertical"></div>
+            <div class="label">{south[0]}</div>
+        </div>
+        """
+
+    # HORIZONTAL ✅ FIXED SPACING
     else:
-        return f"{west[0]}<br>{east[0]}"
+        return f"""
+        <div class="viz-horizontal">
+            <div class="h-label left">{west[0]}</div>
+            <div class="h-label right">{east[0]}</div>
+            <div class="line-horizontal"></div>
+        </div>
+        """
 
 # =========================
-# NORMALIZE
+# EXTRACT AIRWAYS
 # =========================
 def normalize(text):
     text = text.upper()
     text = re.sub(r"[^A-Z0-9/ ]", " ", text)
     return text
 
-# =========================
-# EXTRACT AIRWAYS
-# =========================
 def extract_airways(text):
     text = normalize(text)
     tokens = re.split(r"[ /]+", text)
     return sorted(set(tokens) & valid_airways)
 
 # =========================
-# FEATURE 1: SEGMENT PARSER (BTN CASE)
+# CSS (FINAL POLISHED)
 # =========================
-def extract_btn_segments(text):
-    results = {}
-    for airway in valid_airways:
-        if airway in text:
-            pattern = rf"{airway}.*?BTN\s+([A-Z0-9]+)\s+AND\s+([A-Z0-9]+)"
-            match = re.search(pattern, text)
+st.markdown("""
+<style>
 
-            if match:
-                wp1, wp2 = match.group(1), match.group(2)
-                airway_wps = set(df[df["AWID"] == airway]["WAYPOINT"])
+.block-container {
+    padding-top: 1.8rem !important;
+}
 
-                if wp1 in airway_wps and wp2 in airway_wps:
-                    results[airway] = f"{airway} {wp1}-{wp2}"
-                else:
-                    results[airway] = f"{airway} WAYPOINT NOT FOUND"
-    return results
+/* TILE */
+.tile {
+    background-color: #0e1117;
+    border: 1px solid #333;
+    border-radius: 8px;
+    padding: 12px;
+    height: 300px;
+    display: flex;
+    gap: 10px;
+}
 
-# =========================
-# ✅ FEATURE 2: FULL AIRWAY CLOSED
-# =========================
-def extract_full_closure_segments(text):
-    results = {}
+/* TEXT BLOCK */
+.text-block {
+    width: 60%;
+    overflow-y: auto;
+}
 
-    pattern = r"([A-Z0-9/]+)\s+CLSD"
-    matches = re.findall(pattern, text)
+/* VISUAL BLOCK */
+.viz-container {
+    width: 40%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
 
-    for match in matches:
-        airways = match.split("/")
+/* VISUAL */
+.viz {
+    text-align: center;
+    font-size: 12px;
+}
 
-        for airway in airways:
-            airway = airway.strip()
+/* HORIZONTAL FIXED */
+.viz-horizontal {
+    width: 100%;
+    text-align: center;
+    position: relative;
+}
 
-            if airway in valid_airways:
-                group = df[df["AWID"] == airway]
+.h-label {
+    position: absolute;
+    top: -5px;
+    font-size: 11px;
+}
 
-                # filter required countries
-                group = group[group["COUNTRY"].isin(VALID_COUNTRIES)]
+.h-label.left {
+    left: 0;
+}
 
-                if not group.empty:
-                    first_wp = group.iloc[0]["WAYPOINT"]
-                    last_wp = group.iloc[-1]["WAYPOINT"]
-                    results[airway] = f"{airway} {first_wp}-{last_wp}"
-                else:
-                    results[airway] = f"{airway} WAYPOINT NOT FOUND"
+.h-label.right {
+    right: 0;
+}
 
-    return results
+.line-horizontal {
+    height: 3px;
+    width: 70%;
+    background: #ff4d4d;
+    margin: 15px auto 0 auto;
+}
 
-# =========================
-# MASTER OUTPUT GENERATOR
-# =========================
-def extract_segments(text):
-    text = normalize(text)
+.line-vertical {
+    width: 3px;
+    height: 80px;
+    background: #ff4d4d;
+    margin: auto;
+}
 
-    final = {}
+.label {
+    margin: 4px 0;
+}
 
-    # Priority 1: BTN cases
-    btn_results = extract_btn_segments(text)
-    final.update(btn_results)
+/* TITLE */
+.tile-title {
+    color: #4CAF50;
+    font-weight: bold;
+    margin-bottom: 8px;
+}
 
-    # Priority 2: FULL closure
-    full_results = extract_full_closure_segments(text)
-    for k, v in full_results.items():
-        if k not in final:
-            final[k] = v
+/* ✅ FIX 1: compact airway list */
+.airway-list {
+    max-height: 180px;
+    overflow-y: auto;
+    line-height: 1.2;   /* reduces spacing */
+    font-size: 13px;
+}
 
-    # Remaining airways → manual
-    all_airways = extract_airways(text)
+/* remove extra margins */
+.airway-list div {
+    margin: 0;
+    padding: 0;
+}
 
-    for a in all_airways:
-        if a not in final:
-            final[a] = f"{a} ENTER MANUALLY-ENTER MANUALLY"
+h2 {
+    margin-top: 12px !important;
+}
 
-    return [final[a] for a in sorted(final.keys())]
+</style>
+""", unsafe_allow_html=True)
 
 # =========================
 # STATE
 # =========================
 if "airways" not in st.session_state:
     st.session_state.airways = []
-
-if "segments" not in st.session_state:
-    st.session_state.segments = []
 
 # =========================
 # LAYOUT
@@ -184,48 +225,58 @@ with left:
 
     if c1.button("🚀 Parse"):
         st.session_state.airways = extract_airways(notam_input)
-        st.session_state.segments = extract_segments(notam_input)
 
     if c2.button("Clear"):
         st.session_state.airways = []
-        st.session_state.segments = []
 
-    col_a, col_b = st.columns(2)
+    st.markdown("### ✅ Airways")
 
-    with col_a:
-        st.markdown("### ✅ Airways")
-        for a in st.session_state.airways:
-            st.markdown(f"- {a}")
+    st.markdown('<div class="airway-list">', unsafe_allow_html=True)
 
-    with col_b:
-        st.markdown("### 📤 Output")
-        output_text = "\n".join(st.session_state.segments)
-        st.text_area("Output", value=output_text, height=200)
+    # ✅ FIXED: compact rendering (no st.write)
+    for a in st.session_state.airways:
+        st.markdown(f"<div>• {a}</div>", unsafe_allow_html=True)
+
+    st.markdown('</div>', unsafe_allow_html=True)
 
 # =========================
-# RIGHT PANEL (UNCHANGED)
+# RIGHT PANEL
 # =========================
 with right:
+
     st.markdown("## ✈️ Airway Details")
 
     for i in range(0, len(st.session_state.airways), 3):
+
         cols = st.columns(3)
+
         for col, airway in zip(cols, st.session_state.airways[i:i+3]):
+
             with col:
                 group = df[df["AWID"] == airway]
 
-                html = '<div style="border:1px solid #333;padding:10px;border-radius:10px;">'
-                html += f"<b>{airway}</b><br>"
+                html = f'<div class="tile">'
+
+                # LEFT
+                html += '<div class="text-block">'
+                html += f'<div class="tile-title">{airway}</div>'
 
                 coords_list = []
 
                 for _, r in group.iterrows():
                     lat, lon = parse_coord(r["COORDS"])
                     coords_list.append((r["WAYPOINT"], r["COUNTRY"], lat, lon))
-                    html += f"{r['WAYPOINT']} ({r['COUNTRY']})<br>"
 
-                html += "<hr>"
+                for w, c, _, _ in coords_list:
+                    html += f"{w} ({c})<br>"
+
+                html += '</div>'
+
+                # RIGHT VISUAL
+                html += '<div class="viz-container">'
                 html += get_visual_block(coords_list)
-                html += "</div>"
+                html += '</div>'
+
+                html += '</div>'
 
                 st.markdown(html, unsafe_allow_html=True)
