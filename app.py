@@ -37,7 +37,7 @@ def parse_coord(coord):
         return None, None
 
 # =========================
-# ✅ VISUAL BLOCK (TEXT ONLY — ORIGINAL)
+# VISUAL BLOCK
 # =========================
 def get_visual_block(coords_list):
     coords = [(w, lat, lon) for (w, c, lat, lon) in coords_list if lat is not None]
@@ -55,16 +55,16 @@ def get_visual_block(coords_list):
 
     if abs(dlat) >= abs(dlon):
         return f"""
-{north[0]}
-|
-|
-|
-{south[0]}
-"""
+        <div style='text-align:center'>
+        {north[0]}<br>|<br>|<br>|<br>{south[0]}
+        </div>
+        """
     else:
         return f"""
-{west[0]} ---- {east[0]}
-"""
+        <div style='text-align:center'>
+        {west[0]} -------- {east[0]}
+        </div>
+        """
 
 # =========================
 # NORMALIZE / AIRWAY EXTRACT
@@ -80,25 +80,29 @@ def extract_airways(text):
     return sorted(set(tokens) & valid_airways)
 
 # =========================
-# SEGMENT EXTRACTION
+# ✅ NEW: SEGMENT EXTRACTION LOGIC
 # =========================
 def extract_segments(text, airways):
     text = normalize(text)
+
     output_lines = []
 
     for airway in airways:
+        # Pattern: Y330 BTN FODED AND HARBG
         pattern = rf"{airway}.*?BTN\s+([A-Z0-9]+)\s+AND\s+([A-Z0-9]+)"
         match = re.search(pattern, text)
 
         if match:
             wp1, wp2 = match.group(1), match.group(2)
 
+            # Validate waypoints exist in airway
             airway_wps = set(df[df["AWID"] == airway]["WAYPOINT"])
 
             if wp1 in airway_wps and wp2 in airway_wps:
                 output_lines.append(f"{airway} {wp1}-{wp2}")
             else:
                 output_lines.append(f"{airway} WAYPOINT NOT FOUND")
+
         else:
             output_lines.append(f"{airway} ENTER MANUALLY-ENTER MANUALLY")
 
@@ -141,13 +145,16 @@ with left:
         st.session_state.airways = []
         st.session_state.output = []
 
+    # ✅ Split into 2 columns: Airways + Output
     a_col, o_col = st.columns(2)
 
+    # ================= AIRWAYS =================
     with a_col:
         st.markdown("### ✅ Airways")
         for a in st.session_state.airways:
-            st.markdown(f"<div style='margin-bottom:6px'>• {a}</div>", unsafe_allow_html=True)
+            st.markdown(f"• {a}")
 
+    # ================= OUTPUT =================
     with o_col:
         st.markdown("### 📤 Output")
 
@@ -155,10 +162,14 @@ with left:
         for line in st.session_state.output:
             output_text += line + ",\n"
 
-        st.text_area("Output", value=output_text, height=300)
+        st.text_area(
+            label="Output",
+            value=output_text.strip(),
+            height=300
+        )
 
 # =========================
-# ✅ RIGHT PANEL (FIXED STRUCTURE)
+# RIGHT PANEL (UNCHANGED)
 # =========================
 with right:
     st.markdown("## ✈️ Airway Details")
@@ -170,34 +181,18 @@ with right:
             with col:
                 group = df[df["AWID"] == airway]
 
+                html = f"<div style='border:1px solid #333;padding:10px;border-radius:10px'>"
+                html += f"<h4 style='color:#00FFAA'>{airway}</h4>"
+
                 coords_list = []
-                wp_html = ""
 
                 for _, r in group.iterrows():
                     lat, lon = parse_coord(r["COORDS"])
                     coords_list.append((r["WAYPOINT"], r["COUNTRY"], lat, lon))
-                    wp_html += f"{r['WAYPOINT']} ({r['COUNTRY']})<br>"
+                    html += f"{r['WAYPOINT']} ({r['COUNTRY']})<br>"
 
-                visual = get_visual_block(coords_list)
-
-                # ✅ CRITICAL: FLEX LAYOUT RESTORED
-                html = f"""
-                <div style='border:1px solid #333;padding:10px;border-radius:10px'>
-                    <h4 style='color:#00FFAA'>{airway}</h4>
-
-                    <div style='display:flex;justify-content:space-between'>
-
-                        <div>
-                            {wp_html}
-                        </div>
-
-                        <div style='text-align:center;white-space:pre'>
-                            {visual}
-                        </div>
-
-                    </div>
-
-                </div>
-                """
+                html += "<hr>"
+                html += get_visual_block(coords_list)
+                html += "</div>"
 
                 st.markdown(html, unsafe_allow_html=True)
