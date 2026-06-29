@@ -37,7 +37,7 @@ def parse_coord(coord):
         return None, None
 
 # =========================
-# ✅ RESTORED VISUAL BLOCK (ORIGINAL STYLE)
+# ✅ EXACT ORIGINAL VISUAL BLOCK (100% RESTORED)
 # =========================
 def get_visual_block(coords_list):
     coords = [(w, lat, lon) for (w, c, lat, lon) in coords_list if lat is not None]
@@ -53,27 +53,17 @@ def get_visual_block(coords_list):
     dlat = north[1] - south[1]
     dlon = east[2] - west[2]
 
-    # ✅ EXACT ORIGINAL STYLE PRESERVED
+    # ✅ EXACT SAME AS YOUR ORIGINAL CODE
     if abs(dlat) >= abs(dlon):
-        return f"""
-        <div style="text-align:center">
-            {north[0]}<br>
-            |<br>
-            |<br>
-            |<br>
-            {south[0]}
-        </div>
-        """
+        return f""" 
+{north[0]}
+{south[0]}
+ """
     else:
-        return f"""
-        <div style="text-align:center">
-            {west[0]}<br>
-            ———<br>
-            ———<br>
-            ———<br>
-            {east[0]}
-        </div>
-        """
+        return f""" 
+{west[0]}
+{east[0]}
+ """
 
 # =========================
 # NORMALIZE / AIRWAY EXTRACT
@@ -150,20 +140,14 @@ with left:
         st.session_state.airways = []
         st.session_state.output = []
 
-    # ✅ SPLIT AIRWAYS + OUTPUT
+    # ✅ AIRWAYS + OUTPUT SPLIT
     a_col, o_col = st.columns(2)
 
-    # ================= AIRWAYS (RESTORED STYLE)
     with a_col:
         st.markdown("### ✅ Airways")
-        st.markdown('<div>', unsafe_allow_html=True)
-
         for a in st.session_state.airways:
             st.markdown(f"<div style='margin-bottom:6px'>• {a}</div>", unsafe_allow_html=True)
 
-        st.markdown('</div>', unsafe_allow_html=True)
-
-    # ================= OUTPUT
     with o_col:
         st.markdown("### 📤 Output")
 
@@ -178,7 +162,7 @@ with left:
         )
 
 # =========================
-# RIGHT PANEL (UNCHANGED STRUCTURE)
+# RIGHT PANEL (UNCHANGED)
 # =========================
 with right:
     st.markdown("## ✈️ Airway Details")
@@ -201,7 +185,10 @@ with right:
                     html += f"{r['WAYPOINT']} ({r['COUNTRY']})<br>"
 
                 html += "<hr>"
-                html += get_visual_block(coords_list)
+
+                # ✅ CRITICAL: PURE STRING (NO HTML WRAP)
+                html += f"<pre>{get_visual_block(coords_list)}</pre>"
+
                 html += "</div>"
 
                 st.markdown(html, unsafe_allow_html=True)
