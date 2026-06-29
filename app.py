@@ -37,7 +37,7 @@ def parse_coord(coord):
         return None, None
 
 # =========================
-# VISUAL BLOCK
+# ✅ RESTORED VISUAL BLOCK (ORIGINAL STYLE)
 # =========================
 def get_visual_block(coords_list):
     coords = [(w, lat, lon) for (w, c, lat, lon) in coords_list if lat is not None]
@@ -53,16 +53,25 @@ def get_visual_block(coords_list):
     dlat = north[1] - south[1]
     dlon = east[2] - west[2]
 
+    # ✅ EXACT ORIGINAL STYLE PRESERVED
     if abs(dlat) >= abs(dlon):
         return f"""
-        <div style='text-align:center'>
-        {north[0]}<br>|<br>|<br>|<br>{south[0]}
+        <div style="text-align:center">
+            {north[0]}<br>
+            |<br>
+            |<br>
+            |<br>
+            {south[0]}
         </div>
         """
     else:
         return f"""
-        <div style='text-align:center'>
-        {west[0]} -------- {east[0]}
+        <div style="text-align:center">
+            {west[0]}<br>
+            ———<br>
+            ———<br>
+            ———<br>
+            {east[0]}
         </div>
         """
 
@@ -80,29 +89,25 @@ def extract_airways(text):
     return sorted(set(tokens) & valid_airways)
 
 # =========================
-# ✅ NEW: SEGMENT EXTRACTION LOGIC
+# SEGMENT EXTRACTION
 # =========================
 def extract_segments(text, airways):
     text = normalize(text)
-
     output_lines = []
 
     for airway in airways:
-        # Pattern: Y330 BTN FODED AND HARBG
         pattern = rf"{airway}.*?BTN\s+([A-Z0-9]+)\s+AND\s+([A-Z0-9]+)"
         match = re.search(pattern, text)
 
         if match:
             wp1, wp2 = match.group(1), match.group(2)
 
-            # Validate waypoints exist in airway
             airway_wps = set(df[df["AWID"] == airway]["WAYPOINT"])
 
             if wp1 in airway_wps and wp2 in airway_wps:
                 output_lines.append(f"{airway} {wp1}-{wp2}")
             else:
                 output_lines.append(f"{airway} WAYPOINT NOT FOUND")
-
         else:
             output_lines.append(f"{airway} ENTER MANUALLY-ENTER MANUALLY")
 
@@ -145,16 +150,20 @@ with left:
         st.session_state.airways = []
         st.session_state.output = []
 
-    # ✅ Split into 2 columns: Airways + Output
+    # ✅ SPLIT AIRWAYS + OUTPUT
     a_col, o_col = st.columns(2)
 
-    # ================= AIRWAYS =================
+    # ================= AIRWAYS (RESTORED STYLE)
     with a_col:
         st.markdown("### ✅ Airways")
-        for a in st.session_state.airways:
-            st.markdown(f"• {a}")
+        st.markdown('<div>', unsafe_allow_html=True)
 
-    # ================= OUTPUT =================
+        for a in st.session_state.airways:
+            st.markdown(f"<div style='margin-bottom:6px'>• {a}</div>", unsafe_allow_html=True)
+
+        st.markdown('</div>', unsafe_allow_html=True)
+
+    # ================= OUTPUT
     with o_col:
         st.markdown("### 📤 Output")
 
@@ -169,7 +178,7 @@ with left:
         )
 
 # =========================
-# RIGHT PANEL (UNCHANGED)
+# RIGHT PANEL (UNCHANGED STRUCTURE)
 # =========================
 with right:
     st.markdown("## ✈️ Airway Details")
